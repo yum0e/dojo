@@ -262,7 +262,7 @@ func (m RightPaneModel) renderTabBar() string {
 // renderNoChatMessage renders the message shown for default workspace chat tab.
 func (m RightPaneModel) renderNoChatMessage(height int) string {
 	line1 := "No chat for default workspace"
-	line2 := HelpStyle.Render("Use agent workspaces to chat with Claude")
+	line2 := HelpStyle.Render("Use Claude workspaces to chat with Claude")
 
 	content := line1 + "\n" + line2
 

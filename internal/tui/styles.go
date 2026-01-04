@@ -6,11 +6,16 @@ import "github.com/charmbracelet/lipgloss"
 var (
 	colorMint      = lipgloss.Color("#4ECCA3") // Modern mint green - primary accent
 	colorWhite     = lipgloss.Color("#FAFAFA")
+	colorOrange    = lipgloss.Color("#FF9F43") // Nice orange for Claude
 	colorGray      = lipgloss.Color("#666666")
 	colorDimGray   = lipgloss.Color("#555555")
 	colorBorder    = lipgloss.Color("#333333")
 	colorHighlight = lipgloss.Color("#2A2A2A")
 	colorDark      = lipgloss.Color("#1A1A1A")
+
+	// Chat message backgrounds - subtle and smooth
+	colorUserMsgBg   = lipgloss.Color("#252525") // Slightly lighter than dark
+	colorClaudeMsgBg = lipgloss.Color("#1E1E1E") // Very subtle, close to dark
 )
 
 // Title styles (kept for compatibility but not used)
@@ -116,12 +121,20 @@ var (
 // Chat message styles
 var (
 	ChatUserStyle = lipgloss.NewStyle().
-			Foreground(colorMint).
+			Foreground(colorWhite).
 			Bold(true)
 
 	ChatAgentStyle = lipgloss.NewStyle().
-			Foreground(colorWhite).
+			Foreground(colorOrange).
 			Bold(true)
+
+	ChatUserMsgStyle = lipgloss.NewStyle().
+				Background(colorUserMsgBg).
+				Padding(0, 1)
+
+	ChatAgentMsgStyle = lipgloss.NewStyle().
+				Background(colorClaudeMsgBg).
+				Padding(0, 1)
 
 	ChatToolStyle = lipgloss.NewStyle().
 			Foreground(colorGray)

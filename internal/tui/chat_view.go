@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/bigq/dojo/internal/agent"
 )
@@ -545,14 +546,26 @@ func (m ChatViewModel) View() string {
 func (m ChatViewModel) renderMessage(msg ChatMessage) []string {
 	switch msg.Role {
 	case RoleUser:
-		prefix := ChatUserStyle.Render("You: ")
+		prefix := ChatUserStyle.Render("● you: ")
 		content := msg.Content
-		return wrapLines(prefix+content, m.width)
+		lines := wrapLines(prefix+content, m.width-2) // -2 for padding
+		// Apply background to each line, padding to full width
+		for i, line := range lines {
+			padded := line + strings.Repeat(" ", m.width-2-lipgloss.Width(line))
+			lines[i] = ChatUserMsgStyle.Render(padded)
+		}
+		return lines
 
 	case RoleAgent:
-		prefix := ChatAgentStyle.Render("Agent: ")
+		prefix := ChatAgentStyle.Render("● claude: ")
 		content := msg.Content
-		return wrapLines(prefix+content, m.width)
+		lines := wrapLines(prefix+content, m.width-2) // -2 for padding
+		// Apply background to each line, padding to full width
+		for i, line := range lines {
+			padded := line + strings.Repeat(" ", m.width-2-lipgloss.Width(line))
+			lines[i] = ChatAgentMsgStyle.Render(padded)
+		}
+		return lines
 
 	case RoleError:
 		prefix := ErrorStyle.Render("Error: ")
