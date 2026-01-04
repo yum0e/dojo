@@ -137,11 +137,14 @@ Without session restore, the tool is unusable for real workflows.
 
 ### M2: jj Client
 
-- [ ] `internal/jj/client.go` - Execute jj commands, parse output
-- [ ] `internal/jj/workspace.go` - add, delete, list workspaces
-- [ ] `internal/jj/diff.go` - Get and parse diffs
+- [ ] `internal/jj/errors.go` - Typed errors (ErrWorkspaceExists, ErrWorkspaceNotFound, ErrNotJJRepo)
+- [ ] `internal/jj/client.go` - Execute jj commands, parse output (CWD-based)
+- [ ] `internal/jj/workspace.go` - add (at change ID), delete, list workspaces
+- [ ] `internal/jj/diff.go` - Get diff as raw string
+- [ ] `internal/jj/log.go` - Get and parse log (change ID, message, author, date)
+- [ ] `internal/jj/status.go` - Get working copy status
 - [ ] `internal/jj/ops.go` - commit, squash, rebase, describe, git push
-- [ ] Unit tests with mock jj output
+- [ ] Integration tests with real jj + temp repos
 
 ### M3: Workspace List Pane
 
@@ -226,3 +229,36 @@ The goal is to build dojo using dojo itself. Bootstrap sequence:
 1. Build M1-M3 manually (basic TUI without agents)
 2. Use early dojo to manage agents for M4-M5
 3. Full dogfooding from M6 onwards
+
+---
+
+## Interview Findings (2026-01-04)
+
+### M2: jj Client
+
+**Design Decisions**:
+
+| Topic | Decision |
+|-------|----------|
+| Error handling | Typed errors: `ErrWorkspaceExists`, `ErrWorkspaceNotFound`, `ErrNotJJRepo` |
+| Output parsing | Default text format (regex/string parsing, not JSON) |
+| Diff format | Raw string for display (no structured parsing) |
+| Client context | CWD-based (caller manages directory) |
+| Revision spec | jj Change IDs (e.g., `kpqxywon`) |
+| Testing | Real jj + temp repos (integration-style tests) |
+| Validation | Lazy (fail on first command, no eager check) |
+| Concurrency | Support concurrent calls (mutex for cached state) |
+| Git auth | Assume SSH/credential helper pre-configured |
+| Undo tracking | Deferred to later milestone |
+
+**Scope Additions** (beyond original spec):
+- `jj log` → parsed into commits (change ID, message, author, date)
+- `jj status` → working copy state
+
+**Workspace Model Clarification**:
+- User chooses revision (change ID) and workspace name
+- Path is internally created and tracked by TUI
+- Goal: abstract workspace complexity from user
+
+**Concurrency Note**:
+jj uses file locks per workspace. Concurrent reads are safe. Concurrent writes to same workspace could race, but jj handles gracefully. Consider mutex if caching workspace lists in Go client.
