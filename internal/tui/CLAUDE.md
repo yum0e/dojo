@@ -42,7 +42,7 @@ AppModel
 
 - Vim-style input: Normal mode (j/k scroll, i insert) and Insert mode (Enter submit, Shift+Enter newline)
 - Smart scroll: auto-scrolls only when at bottom
-- Activity spinner: shows animated spinner with current activity (e.g., "ls -la", "reading file.go", "task: explore codebase")
+- Activity spinner: shows animated spinner with phase + activity (e.g., "searching - reading file.go", "implementing - editing file.go")
 - Cancel: press Esc in normal mode to cancel current operation
 - Auto-spawn: agents spawned automatically when entering Chat tab
 

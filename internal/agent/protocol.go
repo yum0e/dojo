@@ -109,8 +109,15 @@ func ParseEvent(line []byte, agentName string) ([]Event, error) {
 		if err := json.Unmarshal(line, &evt); err != nil {
 			return nil, fmt.Errorf("failed to parse result event: %w", err)
 		}
-		// Result events indicate completion, but we don't emit them as tool results
-		// since tool results come from separate events in the stream
+		events = append(events, Event{
+			AgentName: agentName,
+			Type:      EventToolResult,
+			Data: ToolResultData{
+				ToolName: evt.Subtype,
+				Output:   evt.Result,
+				Success:  true,
+			},
+		})
 
 	case "error":
 		var evt ErrorEvent

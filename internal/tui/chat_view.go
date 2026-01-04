@@ -71,6 +71,7 @@ type ChatViewModel struct {
 	spinnerFrame       int    // Current spinner animation frame
 	spinnerActive      bool   // True when spinner tick timer is running
 	currentActivity    string // What Claude is currently doing (e.g., "Bash: ls -la")
+	currentPhase       string // High-level phase (e.g., "searching", "implementing")
 }
 
 // NewChatViewModel creates a new chat view model.
@@ -190,6 +191,10 @@ func (m ChatViewModel) formatToolActivity(toolName, input string) string {
 			return "editing " + editInput.FilePath
 		}
 		return "editing file"
+	case "MultiEdit":
+		return "editing files"
+	case "ApplyPatch":
+		return "applying patch"
 	case "Glob":
 		var globInput struct {
 			Pattern string `json:"pattern"`
@@ -219,6 +224,22 @@ func (m ChatViewModel) formatToolActivity(toolName, input string) string {
 	}
 }
 
+// phaseForTool returns the high-level phase for a tool name.
+func (m ChatViewModel) phaseForTool(toolName string) string {
+	switch toolName {
+	case "Read", "Glob", "Grep":
+		return "searching"
+	case "Write", "Edit", "MultiEdit", "ApplyPatch":
+		return "implementing"
+	case "Bash":
+		return "running"
+	case "Task":
+		return "task"
+	default:
+		return ""
+	}
+}
+
 // handleNormalMode handles keys in normal mode.
 func (m ChatViewModel) handleNormalMode(msg tea.KeyMsg) (ChatViewModel, tea.Cmd) {
 	switch msg.String() {
@@ -227,6 +248,7 @@ func (m ChatViewModel) handleNormalMode(msg tea.KeyMsg) (ChatViewModel, tea.Cmd)
 		if m.shouldShowSpinner() {
 			m.waitingForResponse = false
 			m.currentActivity = ""
+			m.currentPhase = ""
 			m.spinnerActive = false
 			// Clear all in-progress tool states
 			for id, ts := range m.toolStates {
@@ -288,6 +310,7 @@ func (m ChatViewModel) handleInsertMode(msg tea.KeyMsg) (ChatViewModel, tea.Cmd)
 			// Show processing indicator
 			m.waitingForResponse = true
 			m.currentActivity = "thinking"
+			m.currentPhase = ""
 
 			// Auto-scroll to bottom
 			m.atBottom = true
@@ -355,6 +378,10 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 		if data, ok := evt.Data.(agent.OutputData); ok {
 			// Agent is responding, clear waiting state
 			m.waitingForResponse = false
+			if !m.hasInProgressTools() {
+				m.currentActivity = ""
+				m.currentPhase = ""
+			}
 
 			// Append to last agent message or create new one
 			if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == RoleAgent {
@@ -386,6 +413,7 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 
 			// Update current activity with tool details (shown in spinner)
 			m.currentActivity = m.formatToolActivity(data.ToolName, data.Input)
+			m.currentPhase = m.phaseForTool(data.ToolName)
 
 			// Start spinner if not already running
 			var spinnerCmd tea.Cmd
@@ -397,7 +425,14 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 
 	case agent.EventToolResult:
 		if data, ok := evt.Data.(agent.ToolResultData); ok {
-			if ts, ok := m.toolStates[data.ToolID]; ok {
+			if data.ToolID == "" {
+				m.waitingForResponse = false
+				for _, ts := range m.toolStates {
+					if ts.Status == ToolInProgress {
+						ts.Status = ToolSuccess
+					}
+				}
+			} else if ts, ok := m.toolStates[data.ToolID]; ok {
 				ts.Output = data.Output
 				if data.Success {
 					ts.Status = ToolSuccess
@@ -409,6 +444,7 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 			// Check if this was the last running tool
 			if !m.hasInProgressTools() {
 				m.currentActivity = ""
+				m.currentPhase = ""
 			}
 		}
 
@@ -417,6 +453,7 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 			// Clear all spinner state on error
 			m.waitingForResponse = false
 			m.currentActivity = ""
+			m.currentPhase = ""
 			m.spinnerActive = false
 			// Clear in-progress tools
 			for id, ts := range m.toolStates {
@@ -470,6 +507,9 @@ func (m ChatViewModel) View() string {
 		activity := m.currentActivity
 		if activity == "" {
 			activity = "thinking"
+		}
+		if m.currentPhase != "" {
+			activity = m.currentPhase + " - " + activity
 		}
 		activityLine := "  " + IndicatorRunningStyle.Render(spinner) + " " + ChatProcessingStyle.Render(activity)
 		lines = append(lines, activityLine)

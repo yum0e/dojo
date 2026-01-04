@@ -109,6 +109,35 @@ func TestParseEvent_Assistant_ToolUse(t *testing.T) {
 	}
 }
 
+func TestParseEvent_Result(t *testing.T) {
+	line := []byte(`{"type":"result","result":"ok"}`)
+
+	events, err := ParseEvent(line, "test-agent")
+	if err != nil {
+		t.Fatalf("ParseEvent() error = %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("ParseEvent() returned %d events, want 1", len(events))
+	}
+
+	evt := events[0]
+	if evt.Type != EventToolResult {
+		t.Errorf("Event.Type = %v, want %v", evt.Type, EventToolResult)
+	}
+
+	data, ok := evt.Data.(ToolResultData)
+	if !ok {
+		t.Fatalf("Event.Data is not ToolResultData")
+	}
+	if data.Output != "ok" {
+		t.Errorf("ToolResultData.Output = %v, want %v", data.Output, "ok")
+	}
+	if !data.Success {
+		t.Error("ToolResultData.Success = false, want true")
+	}
+}
+
 func TestParseEvent_Error(t *testing.T) {
 	line := []byte(`{"type":"error","error":"Something went wrong"}`)
 

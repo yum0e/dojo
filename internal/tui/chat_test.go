@@ -213,6 +213,72 @@ func TestChatViewHandlesToolUse(t *testing.T) {
 	if chat.currentActivity != "reading /tmp/test.go" {
 		t.Errorf("Expected 'reading /tmp/test.go', got %q", chat.currentActivity)
 	}
+	if chat.currentPhase != "searching" {
+		t.Errorf("Expected phase 'searching', got %q", chat.currentPhase)
+	}
+}
+
+func TestChatViewToolUseSetsImplementingPhase(t *testing.T) {
+	chat := NewChatViewModel()
+	chat.workspace = "test-agent"
+	chat.SetSize(80, 24)
+
+	chat, _ = chat.Update(AgentEventMsg{
+		Event: agent.Event{
+			AgentName: "test-agent",
+			Type:      agent.EventToolUse,
+			Data: agent.ToolUseData{
+				ToolID:   "tool_456",
+				ToolName: "Write",
+				Input:    `{"file_path":"/tmp/new.go"}`,
+			},
+		},
+	})
+
+	if chat.currentActivity != "writing /tmp/new.go" {
+		t.Errorf("Expected 'writing /tmp/new.go', got %q", chat.currentActivity)
+	}
+	if chat.currentPhase != "implementing" {
+		t.Errorf("Expected phase 'implementing', got %q", chat.currentPhase)
+	}
+}
+
+func TestChatViewSpinnerStopsAfterResultEvent(t *testing.T) {
+	chat := NewChatViewModel()
+	chat.workspace = "test-agent"
+	chat.SetSize(80, 24)
+
+	chat, _ = chat.Update(AgentEventMsg{
+		Event: agent.Event{
+			AgentName: "test-agent",
+			Type:      agent.EventToolUse,
+			Data: agent.ToolUseData{
+				ToolID:   "tool_123",
+				ToolName: "Read",
+				Input:    `{"file_path":"/tmp/test.go"}`,
+			},
+		},
+	})
+
+	if !chat.shouldShowSpinner() {
+		t.Fatal("Expected spinner to be active after tool use")
+	}
+
+	events, err := agent.ParseEvent([]byte(`{"type":"result","result":"ok"}`), "test-agent")
+	if err != nil {
+		t.Fatalf("ParseEvent() error = %v", err)
+	}
+
+	for _, evt := range events {
+		chat, _ = chat.Update(AgentEventMsg{Event: evt})
+	}
+
+	if chat.shouldShowSpinner() {
+		t.Fatal("Expected spinner to stop after result event")
+	}
+	if chat.currentPhase != "" {
+		t.Fatalf("Expected phase to be cleared after result event, got %q", chat.currentPhase)
+	}
 }
 
 // TestChatViewHandlesError tests that error events are handled
