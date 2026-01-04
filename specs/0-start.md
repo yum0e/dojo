@@ -130,10 +130,10 @@ Without session restore, the tool is unusable for real workflows.
 
 ### M1: Scaffold
 
-- [ ] Initialize Go module (`go mod init github.com/user/dojo`)
-- [ ] Basic bubbletea app structure
-- [ ] Renders "Hello Dojo" with lipgloss styling
-- [ ] Project directory structure in place
+- [x] Initialize Go module (`go mod init github.com/user/dojo`)
+- [x] Basic bubbletea app structure
+- [x] Renders "Hello Dojo" with lipgloss styling
+- [x] Project directory structure in place
 
 ### M2: jj Client
 
