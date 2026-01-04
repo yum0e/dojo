@@ -108,9 +108,9 @@ func (m WorkspaceListModel) Update(msg tea.Msg) (WorkspaceListModel, tea.Cmd) {
 		}
 
 	case WorkspaceDeletedMsg:
-		if msg.Err == nil {
-			return m, m.loadWorkspaces()
-		}
+		// Always reload the list, even if there was an error
+		// (partial deletion may have occurred)
+		return m, m.loadWorkspaces()
 	}
 
 	return m, nil

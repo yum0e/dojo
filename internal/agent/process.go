@@ -85,46 +85,43 @@ func (p *Process) Start(ctx context.Context) error {
 }
 
 // Stop gracefully stops the process (SIGTERM, then SIGKILL after timeout).
+// This is non-blocking - it signals the process to stop and returns immediately.
+// The waitProcess goroutine will handle state updates when the process exits.
 func (p *Process) Stop(timeout time.Duration) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	if p.State != StateRunning || p.cmd == nil || p.cmd.Process == nil {
+		p.mu.Unlock()
 		return nil
 	}
 
 	// Close stdin to signal EOF
 	if p.stdin != nil {
 		p.stdin.Close()
+		p.stdin = nil
 	}
+
+	// Get process reference and cancel func while holding lock
+	proc := p.cmd.Process
+	cancel := p.cancel
+	p.mu.Unlock()
 
 	// Send SIGTERM
-	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		// Process might already be dead
-		return nil
-	}
+	_ = proc.Signal(syscall.SIGTERM)
 
-	// Wait for process to exit with timeout
-	done := make(chan error, 1)
+	// Schedule force kill after timeout (non-blocking)
 	go func() {
-		done <- p.cmd.Wait()
+		time.Sleep(timeout)
+		p.mu.RLock()
+		state := p.State
+		p.mu.RUnlock()
+		if state == StateRunning {
+			proc.Kill()
+		}
 	}()
 
-	select {
-	case <-done:
-		// Process exited gracefully
-	case <-time.After(timeout):
-		// Force kill
-		p.cmd.Process.Kill()
-		<-done // Wait for process to actually exit
-	}
-
-	oldState := p.State
-	p.State = StateStopped
-	p.emitStateChange(oldState, StateStopped)
-
-	if p.cancel != nil {
-		p.cancel()
+	// Cancel context to stop readOutput goroutine
+	if cancel != nil {
+		cancel()
 	}
 
 	return nil

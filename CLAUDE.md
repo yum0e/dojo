@@ -73,3 +73,33 @@ Each internal package has its own `CLAUDE.md` with package-specific details:
 - Changed behavior (e.g., who is responsible for cleanup)
 - New constants or configuration
 - Important usage notes
+
+## Bug Fixing Workflow
+
+When a bug is discovered, follow this process:
+
+1. **Write a failing test first** - Create a test that reproduces the broken behavior. The test should fail, confirming the bug exists.
+2. **Verify the test fails** - Run the test to ensure it actually catches the bug.
+3. **Fix the bug** - Implement the fix.
+4. **Verify the test passes** - Run the test again to confirm the fix works.
+5. **Run full test suite** - Ensure no regressions.
+
+This approach ensures:
+- The bug is properly understood before fixing
+- The fix actually addresses the issue
+- The bug won't silently regress in the future
+
+Example:
+```go
+// Test written BEFORE fix - should fail
+func TestStartAgent_AlreadyRunning(t *testing.T) {
+    // ... setup ...
+    err := mgr.StartAgent(ctx, "test-agent")
+    if err != nil {
+        t.Errorf("StartAgent() should return nil for already running agent")
+    }
+}
+// Run test -> FAILS (bug confirmed)
+// Fix the code
+// Run test -> PASSES (bug fixed)
+```
