@@ -94,3 +94,21 @@ func parseTimestamp(s string) (time.Time, error) {
 
 	return time.Time{}, fmt.Errorf("unable to parse timestamp: %s", s)
 }
+
+// GetWorkingCopyChangeID returns the change ID of the working copy (@) in a specific directory.
+func (c *Client) GetWorkingCopyChangeID(ctx context.Context, dir string) (string, error) {
+	output, err := c.runInDir(ctx, dir, "log", "-r", "@", "--no-graph", "-T", "change_id.short()")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// GetParentChangeID returns the change ID of the parent of the working copy in a specific directory.
+func (c *Client) GetParentChangeID(ctx context.Context, dir string) (string, error) {
+	output, err := c.runInDir(ctx, dir, "log", "-r", "@-", "--no-graph", "-T", "change_id.short()")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(output), nil
+}

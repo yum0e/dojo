@@ -2,6 +2,7 @@ package jj
 
 import (
 	"context"
+	"strings"
 )
 
 // DiffOptions configures the diff command.
@@ -11,6 +12,7 @@ type DiffOptions struct {
 }
 
 // Diff returns the raw diff output with color codes.
+// Automatically handles stale workspaces by updating them first.
 func (c *Client) Diff(ctx context.Context, opts *DiffOptions) (string, error) {
 	args := []string{"diff", "--color=always"}
 
@@ -23,5 +25,17 @@ func (c *Client) Diff(ctx context.Context, opts *DiffOptions) (string, error) {
 		workDir = opts.WorkDir
 	}
 
-	return c.runInDir(ctx, workDir, args...)
+	result, err := c.runInDir(ctx, workDir, args...)
+	if err != nil {
+		// Check if this is a stale workspace error
+		if cmdErr, ok := err.(*CommandError); ok && strings.Contains(cmdErr.Stderr, "working copy is stale") {
+			// Try to update stale workspace and retry
+			if updateErr := c.WorkspaceUpdateStale(ctx, workDir); updateErr == nil {
+				// Retry the diff
+				return c.runInDir(ctx, workDir, args...)
+			}
+		}
+	}
+
+	return result, err
 }

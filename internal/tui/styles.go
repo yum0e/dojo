@@ -4,22 +4,20 @@ import "github.com/charmbracelet/lipgloss"
 
 // Colors
 var (
-	colorPrimary   = lipgloss.Color("#7D56F4")
+	colorMint      = lipgloss.Color("#4ECCA3") // Modern mint green - primary accent
 	colorWhite     = lipgloss.Color("#FAFAFA")
-	colorGray      = lipgloss.Color("#888888")
-	colorGreen     = lipgloss.Color("#00FF00")
-	colorGold      = lipgloss.Color("#FFD700")
+	colorGray      = lipgloss.Color("#666666")
 	colorDimGray   = lipgloss.Color("#555555")
-	colorBorder    = lipgloss.Color("#444444")
-	colorHighlight = lipgloss.Color("#3D3D3D")
+	colorBorder    = lipgloss.Color("#333333")
+	colorHighlight = lipgloss.Color("#2A2A2A")
+	colorDark      = lipgloss.Color("#1A1A1A")
 )
 
-// Title styles
+// Title styles (kept for compatibility but not used)
 var (
 	TitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorWhite).
-			Background(colorPrimary).
+			Foreground(colorMint).
 			Padding(0, 1)
 )
 
@@ -27,7 +25,7 @@ var (
 var (
 	PaneBorderFocused = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorPrimary)
+				BorderForeground(colorMint)
 
 	PaneBorderUnfocused = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
@@ -47,17 +45,17 @@ var (
 
 // Agent state indicators
 const (
-	IndicatorDefault = "●" // Green - default workspace
-	IndicatorRunning = "◐" // Gold - agent running
+	IndicatorDefault = "●" // Mint - default workspace
+	IndicatorRunning = "◐" // Mint - agent running
 	IndicatorIdle    = "○" // Gray - agent idle
 )
 
 var (
 	IndicatorDefaultStyle = lipgloss.NewStyle().
-				Foreground(colorGreen)
+				Foreground(colorMint)
 
 	IndicatorRunningStyle = lipgloss.NewStyle().
-				Foreground(colorGold)
+				Foreground(colorMint)
 
 	IndicatorIdleStyle = lipgloss.NewStyle().
 				Foreground(colorDimGray)
@@ -67,9 +65,14 @@ var (
 var HelpStyle = lipgloss.NewStyle().
 	Foreground(colorGray)
 
+// Key style for highlighting keybindings
+var KeyStyle = lipgloss.NewStyle().
+	Foreground(colorMint).
+	Bold(true)
+
 // Error style
 var ErrorStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("#FF0000")).
+	Foreground(lipgloss.Color("#FF6B6B")).
 	Bold(true)
 
 // Empty diff style
@@ -81,9 +84,9 @@ var EmptyDiffStyle = lipgloss.NewStyle().
 var (
 	ConfirmBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorPrimary).
+			BorderForeground(colorMint).
 			Padding(1, 2).
-			Background(lipgloss.Color("#1A1A1A"))
+			Background(colorDark)
 
 	ConfirmPromptStyle = lipgloss.NewStyle().
 				Foreground(colorWhite).
@@ -93,43 +96,47 @@ var (
 // Tab bar styles
 var (
 	TabBarStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#1A1A1A"))
+			Background(colorDark)
 
 	TabActiveStyle = lipgloss.NewStyle().
-			Foreground(colorWhite).
-			Background(colorPrimary).
+			Foreground(colorDark).
+			Background(colorMint).
 			Bold(true).
 			Padding(0, 1)
 
 	TabInactiveStyle = lipgloss.NewStyle().
 				Foreground(colorGray).
-				Background(lipgloss.Color("#2A2A2A")).
+				Background(colorHighlight).
 				Padding(0, 1)
 )
 
 // Chat message styles
 var (
 	ChatUserStyle = lipgloss.NewStyle().
-			Foreground(colorPrimary).
+			Foreground(colorMint).
 			Bold(true)
 
 	ChatAgentStyle = lipgloss.NewStyle().
-			Foreground(colorGreen).
+			Foreground(colorWhite).
 			Bold(true)
 
 	ChatToolStyle = lipgloss.NewStyle().
 			Foreground(colorGray)
 
 	ChatToolSuccessStyle = lipgloss.NewStyle().
-				Foreground(colorGreen)
+				Foreground(colorMint)
 
 	ChatToolErrorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FF0000"))
+				Foreground(lipgloss.Color("#FF6B6B"))
 
 	ChatModeNormalStyle = lipgloss.NewStyle().
 				Foreground(colorGray)
 
 	ChatModeInsertStyle = lipgloss.NewStyle().
-				Foreground(colorGold).
+				Foreground(colorMint).
 				Bold(true)
+
+	ChatProcessingStyle = lipgloss.NewStyle().
+				Foreground(colorMint).
+				Italic(true)
 )

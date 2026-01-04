@@ -217,6 +217,14 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ctx := context.Background()
 			err := m.agentManager.RestartAgent(ctx, msg.WorkspaceName)
 			if err != nil {
+				// If agent not found in processes map, try StartAgent
+				// This happens when app restarts or agent was never started
+				if errors.Is(err, agent.ErrAgentNotFound) {
+					err = m.agentManager.StartAgent(ctx, msg.WorkspaceName)
+					if err == nil {
+						return SpawnAgentResultMsg{WorkspaceName: msg.WorkspaceName, Success: true}
+					}
+				}
 				return AgentCrashedMsg{WorkspaceName: msg.WorkspaceName, Error: err}
 			}
 			return SpawnAgentResultMsg{WorkspaceName: msg.WorkspaceName, Success: true}
@@ -285,8 +293,8 @@ func (m *AppModel) recalculateLayout() {
 	// Right pane gets remaining width
 	rightWidth := m.width - leftWidth - 3 // 3 for borders/gap
 
-	// Height for content (minus title and help bar)
-	contentHeight := m.height - 4 // title (1) + help (1) + borders (2)
+	// Height for content (minus help bar)
+	contentHeight := m.height - 3 // help (1) + borders (2)
 
 	m.workspaceList.SetSize(leftWidth, contentHeight)
 	m.rightPane.SetSize(rightWidth, contentHeight)
@@ -299,10 +307,6 @@ func (m AppModel) View() string {
 		return "Initializing..."
 	}
 
-	// Title bar
-	title := TitleStyle.Render("DOJO")
-	titleBar := lipgloss.NewStyle().Width(m.width).Render(title)
-
 	// Calculate pane dimensions
 	leftWidth := m.workspaceList.MinWidth()
 	if leftWidth < 15 {
@@ -313,7 +317,7 @@ func (m AppModel) View() string {
 	}
 	rightWidth := m.width - leftWidth - 1 // 1 for gap
 
-	contentHeight := m.height - 4
+	contentHeight := m.height - 3
 
 	// Left pane (workspace list)
 	leftBorder := m.workspaceList.borderStyle().
@@ -330,21 +334,32 @@ func (m AppModel) View() string {
 	// Join panes horizontally
 	content := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
 
-	// Help bar - context-aware
+	// Help bar - context-aware with highlighted keys
 	var helpText string
 	if m.focusedPane == FocusRightPane && m.rightPane.activeTab == TabChat && !m.rightPane.isDefault {
 		if m.rightPane.chatView.inputMode == ModeInsert {
-			helpText = "Enter: send | Shift+Enter: newline | Esc: normal mode"
+			helpText = KeyStyle.Render("Enter") + HelpStyle.Render(": send ") +
+				KeyStyle.Render("Shift+Enter") + HelpStyle.Render(": newline ") +
+				KeyStyle.Render("Esc") + HelpStyle.Render(": normal mode")
 		} else {
-			helpText = "i: insert | j/k: scroll | g/G: top/bottom | Shift+Tab: switch tab"
+			helpText = KeyStyle.Render("i") + HelpStyle.Render(": insert ") +
+				KeyStyle.Render("j/k") + HelpStyle.Render(": scroll ") +
+				KeyStyle.Render("g/G") + HelpStyle.Render(": top/bottom ") +
+				KeyStyle.Render("Shift+Tab") + HelpStyle.Render(": switch tab")
 		}
 	} else {
-		helpText = "j/k: navigate | Enter: select | a: add | d: delete | r: refresh | Tab: pane | Shift+Tab: tab"
+		helpText = KeyStyle.Render("j/k") + HelpStyle.Render(": navigate ") +
+			KeyStyle.Render("Enter") + HelpStyle.Render(": select ") +
+			KeyStyle.Render("a") + HelpStyle.Render(": add ") +
+			KeyStyle.Render("d") + HelpStyle.Render(": delete ") +
+			KeyStyle.Render("r") + HelpStyle.Render(": refresh ") +
+			KeyStyle.Render("Tab") + HelpStyle.Render(": pane ") +
+			KeyStyle.Render("Shift+Tab") + HelpStyle.Render(": tab")
 	}
-	helpBar := HelpStyle.Width(m.width).Render(helpText)
+	helpBar := lipgloss.NewStyle().Width(m.width).Render(helpText)
 
 	// Combine all
-	view := lipgloss.JoinVertical(lipgloss.Left, titleBar, content, helpBar)
+	view := lipgloss.JoinVertical(lipgloss.Left, content, helpBar)
 
 	// Overlay confirm dialog if visible
 	if m.confirm.Visible() {

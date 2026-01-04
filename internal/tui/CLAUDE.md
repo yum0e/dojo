@@ -31,19 +31,35 @@ AppModel
 └── agentManager        (eager init in NewApp, manages agent processes)
 ```
 
+## Theme & Styling
+
+- Primary accent color: mint green (`#4ECCA3`)
+- Keybindings in help bar are highlighted in mint green
+- No title bar (clean, minimal UI)
+- Focused panes have mint green borders
+
 ## Chat View Features
 
 - Vim-style input: Normal mode (j/k scroll, i insert) and Insert mode (Enter submit, Shift+Enter newline)
 - Smart scroll: auto-scrolls only when at bottom
 - Tool states: compact display for success, auto-expand on error
-- Message queue: input queued while agent is busy, delivered when idle
+- Processing indicator: shows "thinking..." while waiting for agent response
 - Auto-spawn: agents spawned automatically when entering Chat tab
+
+## Workspace Management
+
+- Press `a` to create a new workspace
+- Input field appears pre-filled with next available `agent-N` name
+- Edit name or keep default, then press Enter to create
+- Press Esc to cancel workspace creation
+- Valid characters: a-z, A-Z, 0-9, hyphen, underscore
 
 ## Tab Navigation
 
 - `Shift+Tab` or `Ctrl+Tab`: cycle between Chat/Diff tabs
-- Default workspace has no Chat tab (user-only workspace)
-- Tab preference remembered per workspace
+- Tab bar always visible for consistent layout
+- Default workspace shows "No chat" message in Chat tab (centered box with mint border)
+- Tab preference remembered per workspace (non-default only)
 
 ## App Initialization Sequence
 
@@ -70,6 +86,7 @@ app.Shutdown()                   // 6. Cleanup on exit
 - `DeleteWorkspace()` removes both jj workspace and the directory
 - Agent events flow: `manager.Events()` → `StartEventListener` goroutine → `tea.Program.Send()`
 - Error messages from agent are shown in chat (stderr captured, SendInput errors displayed)
+- Retry (`r` key) falls back to `StartAgent` if process not in manager map (handles app restart scenarios)
 
 ## Key Messages
 

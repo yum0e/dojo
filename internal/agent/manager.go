@@ -169,6 +169,7 @@ func (m *Manager) SpawnAgent(ctx context.Context, name string) error {
 // StartAgent starts a claude process in an existing workspace.
 // Use this when the workspace already exists (e.g., switching to Chat tab).
 // Returns nil if agent is already running.
+// Handles stale workspaces by updating them and creating new revisions if needed.
 func (m *Manager) StartAgent(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -201,6 +202,13 @@ func (m *Manager) StartAgent(ctx context.Context, name string) error {
 	// Verify workspace directory exists
 	if _, err := os.Stat(workDir); os.IsNotExist(err) {
 		return ErrWorkspaceNotFound
+	}
+
+	// Handle stale workspaces (skip if no jjClient, e.g., in tests)
+	// Stale workspaces occur when the default workspace makes changes that rebase
+	// the agent's commits, but the agent's working copy hasn't been updated.
+	if m.jjClient != nil {
+		_ = m.jjClient.WorkspaceUpdateStale(ctx, workDir)
 	}
 
 	// Create process

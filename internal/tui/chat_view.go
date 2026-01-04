@@ -55,17 +55,18 @@ type ToolState struct {
 
 // ChatViewModel manages the chat interface.
 type ChatViewModel struct {
-	messages      []ChatMessage
-	scrollY       int
-	inputMode     InputMode
-	inputBuffer   string
-	inputCursor   int
-	agentState    agent.State
-	workspace     string
-	toolStates    map[string]*ToolState
-	focused       bool
-	width, height int
-	atBottom      bool // For smart scroll
+	messages           []ChatMessage
+	scrollY            int
+	inputMode          InputMode
+	inputBuffer        string
+	inputCursor        int
+	agentState         agent.State
+	workspace          string
+	toolStates         map[string]*ToolState
+	focused            bool
+	width, height      int
+	atBottom           bool // For smart scroll
+	waitingForResponse bool // True after sending message, until agent responds
 }
 
 // NewChatViewModel creates a new chat view model.
@@ -153,6 +154,9 @@ func (m ChatViewModel) handleInsertMode(msg tea.KeyMsg) (ChatViewModel, tea.Cmd)
 				Timestamp: time.Now(),
 			})
 
+			// Show processing indicator
+			m.waitingForResponse = true
+
 			// Auto-scroll to bottom
 			m.atBottom = true
 			m.scrollY = m.maxScroll()
@@ -209,6 +213,9 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 	switch evt.Type {
 	case agent.EventOutput:
 		if data, ok := evt.Data.(agent.OutputData); ok {
+			// Agent is responding, clear waiting state
+			m.waitingForResponse = false
+
 			// Append to last agent message or create new one
 			if len(m.messages) > 0 && m.messages[len(m.messages)-1].Role == RoleAgent {
 				m.messages[len(m.messages)-1].Content += data.Text
@@ -228,6 +235,9 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 
 	case agent.EventToolUse:
 		if data, ok := evt.Data.(agent.ToolUseData); ok {
+			// Agent is responding with tool use, clear waiting state
+			m.waitingForResponse = false
+
 			m.toolStates[data.ToolID] = &ToolState{
 				Name:   data.ToolName,
 				Status: ToolInProgress,
@@ -259,6 +269,9 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 
 	case agent.EventError:
 		if data, ok := evt.Data.(agent.ErrorData); ok {
+			// Clear waiting state on error
+			m.waitingForResponse = false
+
 			m.messages = append(m.messages, ChatMessage{
 				Role:      RoleError,
 				Content:   data.Message,
@@ -296,6 +309,11 @@ func (m ChatViewModel) View() string {
 	var lines []string
 	for _, msg := range m.messages {
 		lines = append(lines, m.renderMessage(msg)...)
+	}
+
+	// Show processing indicator when waiting for response
+	if m.waitingForResponse {
+		lines = append(lines, ChatProcessingStyle.Render("  thinking..."))
 	}
 
 	// Apply scrolling

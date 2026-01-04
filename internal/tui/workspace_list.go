@@ -29,14 +29,25 @@ type WorkspaceItem struct {
 	State AgentState
 }
 
+// WorkspaceInputMode represents the input mode for workspace list.
+type WorkspaceInputMode int
+
+const (
+	WorkspaceNormal WorkspaceInputMode = iota
+	WorkspaceNameInput
+)
+
 // WorkspaceListModel is the model for the workspace list component.
 type WorkspaceListModel struct {
-	items    []WorkspaceItem
-	cursor   int
-	focused  bool
-	jjClient *jj.Client
-	width    int
-	height   int
+	items       []WorkspaceItem
+	cursor      int
+	focused     bool
+	jjClient    *jj.Client
+	width       int
+	height      int
+	inputMode   WorkspaceInputMode
+	inputBuffer string
+	inputCursor int
 }
 
 // NewWorkspaceListModel creates a new workspace list model.
@@ -69,6 +80,11 @@ func (m WorkspaceListModel) Update(msg tea.Msg) (WorkspaceListModel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle input mode separately
+		if m.inputMode == WorkspaceNameInput {
+			return m.handleNameInput(msg)
+		}
+
 		switch msg.String() {
 		case "j", "down":
 			if m.cursor < len(m.items)-1 {
@@ -83,7 +99,11 @@ func (m WorkspaceListModel) Update(msg tea.Msg) (WorkspaceListModel, tea.Cmd) {
 		case "enter":
 			return m, m.emitSelected()
 		case "a":
-			return m, m.addWorkspace()
+			// Enter name input mode
+			m.inputMode = WorkspaceNameInput
+			m.inputBuffer = m.generateWorkspaceName() // Pre-fill with default
+			m.inputCursor = len(m.inputBuffer)
+			return m, nil
 		case "d":
 			if m.cursor < len(m.items) && m.items[m.cursor].Name != "default" {
 				return m, func() tea.Msg {
@@ -126,13 +146,80 @@ func (m WorkspaceListModel) emitSelected() tea.Cmd {
 	}
 }
 
-// addWorkspace creates a new agent workspace.
-func (m WorkspaceListModel) addWorkspace() tea.Cmd {
+// handleNameInput handles keyboard input in name input mode.
+func (m WorkspaceListModel) handleNameInput(msg tea.KeyMsg) (WorkspaceListModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Cancel input
+		m.inputMode = WorkspaceNormal
+		m.inputBuffer = ""
+		m.inputCursor = 0
+		return m, nil
+	case "enter":
+		// Submit name
+		name := strings.TrimSpace(m.inputBuffer)
+		if name == "" {
+			return m, nil
+		}
+		// Check if name already exists
+		for _, item := range m.items {
+			if item.Name == name {
+				// Name exists, stay in input mode
+				return m, nil
+			}
+		}
+		m.inputMode = WorkspaceNormal
+		m.inputBuffer = ""
+		m.inputCursor = 0
+		return m, m.addWorkspaceWithName(name)
+	case "backspace":
+		if m.inputCursor > 0 {
+			m.inputBuffer = m.inputBuffer[:m.inputCursor-1] + m.inputBuffer[m.inputCursor:]
+			m.inputCursor--
+		}
+	case "left":
+		if m.inputCursor > 0 {
+			m.inputCursor--
+		}
+	case "right":
+		if m.inputCursor < len(m.inputBuffer) {
+			m.inputCursor++
+		}
+	case "ctrl+a", "home":
+		m.inputCursor = 0
+	case "ctrl+e", "end":
+		m.inputCursor = len(m.inputBuffer)
+	case "ctrl+u":
+		m.inputBuffer = ""
+		m.inputCursor = 0
+	default:
+		// Insert character
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+			char := string(msg.Runes)
+			// Only allow valid workspace name characters
+			if isValidWorkspaceChar(char) {
+				m.inputBuffer = m.inputBuffer[:m.inputCursor] + char + m.inputBuffer[m.inputCursor:]
+				m.inputCursor += len(char)
+			}
+		}
+	}
+	return m, nil
+}
+
+// isValidWorkspaceChar checks if a character is valid for workspace names.
+func isValidWorkspaceChar(s string) bool {
+	for _, r := range s {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// addWorkspaceWithName creates a new agent workspace with the specified name.
+func (m WorkspaceListModel) addWorkspaceWithName(name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-
-		// Generate unique name
-		name := m.generateWorkspaceName()
 
 		// Get the repo root for workspace path
 		root, err := m.jjClient.WorkspaceRoot(ctx)
@@ -196,6 +283,21 @@ func (m WorkspaceListModel) View() string {
 		if i < len(m.items)-1 {
 			b.WriteString("\n")
 		}
+	}
+
+	// Show input field if in name input mode
+	if m.inputMode == WorkspaceNameInput {
+		b.WriteString("\n")
+		b.WriteString(strings.Repeat("─", m.width-2))
+		b.WriteString("\n")
+		// Show input with cursor
+		before := m.inputBuffer[:m.inputCursor]
+		after := m.inputBuffer[m.inputCursor:]
+		cursor := "▌"
+		inputLine := IndicatorIdleStyle.Render("+ ") + before + cursor + after
+		b.WriteString(inputLine)
+		b.WriteString("\n")
+		b.WriteString(HelpStyle.Render("Enter: create  Esc: cancel"))
 	}
 
 	return b.String()

@@ -73,3 +73,10 @@ func (c *Client) WorkspaceRoot(ctx context.Context) (string, error) {
 	}
 	return strings.TrimSpace(output), nil
 }
+
+// WorkspaceUpdateStale updates a stale working copy in a specific directory.
+// This is needed when the working copy has diverged from the operation log.
+func (c *Client) WorkspaceUpdateStale(ctx context.Context, dir string) error {
+	_, err := c.runInDir(ctx, dir, "workspace", "update-stale")
+	return err
+}

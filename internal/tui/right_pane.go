@@ -65,12 +65,10 @@ func (m RightPaneModel) Update(msg tea.Msg) (RightPaneModel, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+tab", "shift+tab":
-			// Cycle tabs (only if not default workspace)
-			if !m.isDefault {
-				cmd := m.cycleTab()
-				if cmd != nil {
-					cmds = append(cmds, cmd)
-				}
+			// Cycle tabs
+			cmd := m.cycleTab()
+			if cmd != nil {
+				cmds = append(cmds, cmd)
 			}
 			return m, tea.Batch(cmds...)
 		}
@@ -173,24 +171,22 @@ func (m RightPaneModel) Update(msg tea.Msg) (RightPaneModel, tea.Cmd) {
 
 // cycleTab switches between Chat and Diff tabs.
 func (m *RightPaneModel) cycleTab() tea.Cmd {
-	if m.isDefault {
-		return nil
-	}
-
 	var cmd tea.Cmd
 	if m.activeTab == TabChat {
 		m.activeTab = TabDiff
 	} else {
 		m.activeTab = TabChat
-		// Request agent spawn if entering chat
-		cmd = func() tea.Msg {
-			return SpawnAgentMsg{WorkspaceName: m.workspace}
+		// Request agent spawn if entering chat (only for non-default workspaces)
+		if !m.isDefault {
+			cmd = func() tea.Msg {
+				return SpawnAgentMsg{WorkspaceName: m.workspace}
+			}
 		}
 	}
 
 	// Update focus on child views
 	if m.focused {
-		if m.activeTab == TabChat {
+		if m.activeTab == TabChat && !m.isDefault {
 			m.chatView.SetFocused(true)
 			m.diffView.SetFocused(false)
 		} else {
@@ -199,9 +195,11 @@ func (m *RightPaneModel) cycleTab() tea.Cmd {
 		}
 	}
 
-	// Save tab preference
-	if state, ok := m.tabMemory[m.workspace]; ok {
-		state.lastTab = m.activeTab
+	// Save tab preference (only for non-default workspaces)
+	if !m.isDefault {
+		if state, ok := m.tabMemory[m.workspace]; ok {
+			state.lastTab = m.activeTab
+		}
 	}
 
 	return cmd
@@ -213,13 +211,9 @@ func (m RightPaneModel) View() string {
 		return ""
 	}
 
-	// Tab bar (only show for non-default workspaces)
-	var tabBar string
-	tabBarHeight := 0
-	if !m.isDefault {
-		tabBar = m.renderTabBar()
-		tabBarHeight = 1
-	}
+	// Always show tab bar for consistency
+	tabBar := m.renderTabBar()
+	tabBarHeight := 1
 
 	// Content area
 	contentHeight := m.height - tabBarHeight
@@ -228,8 +222,13 @@ func (m RightPaneModel) View() string {
 	}
 
 	var content string
-	if m.activeTab == TabChat && !m.isDefault {
-		content = m.chatView.View()
+	if m.activeTab == TabChat {
+		if m.isDefault {
+			// Show message for default workspace
+			content = m.renderNoChatMessage(contentHeight)
+		} else {
+			content = m.chatView.View()
+		}
 	} else {
 		content = m.diffView.View()
 	}
@@ -240,10 +239,7 @@ func (m RightPaneModel) View() string {
 		content = flash + "\n" + content
 	}
 
-	if tabBar != "" {
-		return lipgloss.JoinVertical(lipgloss.Left, tabBar, content)
-	}
-	return content
+	return lipgloss.JoinVertical(lipgloss.Left, tabBar, content)
 }
 
 // renderTabBar renders the tab bar.
@@ -263,16 +259,33 @@ func (m RightPaneModel) renderTabBar() string {
 	return TabBarStyle.Width(m.width).Render(tabs)
 }
 
+// renderNoChatMessage renders the message shown for default workspace chat tab.
+func (m RightPaneModel) renderNoChatMessage(height int) string {
+	line1 := "No chat for default workspace"
+	line2 := HelpStyle.Render("Use agent workspaces to chat with Claude")
+
+	content := line1 + "\n" + line2
+
+	// Style the box similar to confirm dialog
+	box := ConfirmBoxStyle.Render(content)
+
+	// Center the box in the available space
+	return lipgloss.Place(
+		m.width,
+		height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+	)
+}
+
 // SetSize sets the dimensions of the right pane.
 func (m *RightPaneModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	// Account for tab bar
-	tabBarHeight := 0
-	if !m.isDefault {
-		tabBarHeight = 1
-	}
+	// Always account for tab bar
+	tabBarHeight := 1
 	contentHeight := height - tabBarHeight
 	if contentHeight < 1 {
 		contentHeight = 1

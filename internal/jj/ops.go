@@ -10,6 +10,24 @@ func (c *Client) New(ctx context.Context) error {
 	return err
 }
 
+// NewInDir creates a new empty revision in a specific directory.
+func (c *Client) NewInDir(ctx context.Context, dir string) error {
+	_, err := c.runInDir(ctx, dir, "new")
+	return err
+}
+
+// NewFromRevision creates a new empty revision based on a specific revision.
+func (c *Client) NewFromRevision(ctx context.Context, revision string) error {
+	_, err := c.run(ctx, "new", revision)
+	return err
+}
+
+// NewFromRevisionInDir creates a new empty revision based on a specific revision in a specific directory.
+func (c *Client) NewFromRevisionInDir(ctx context.Context, dir, revision string) error {
+	_, err := c.runInDir(ctx, dir, "new", revision)
+	return err
+}
+
 // Commit creates a new commit with the given message.
 func (c *Client) Commit(ctx context.Context, message string) error {
 	_, err := c.run(ctx, "commit", "-m", message)

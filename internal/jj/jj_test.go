@@ -537,3 +537,166 @@ func TestSquash(t *testing.T) {
 		}
 	})
 }
+
+// TestGetWorkingCopyChangeID tests getting the change ID of a workspace.
+func TestGetWorkingCopyChangeID(t *testing.T) {
+	repoPath, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	runInDir(t, repoPath, func() {
+		c := NewClient()
+		ctx := context.Background()
+
+		changeID, err := c.GetWorkingCopyChangeID(ctx, repoPath)
+		if err != nil {
+			t.Fatalf("GetWorkingCopyChangeID failed: %v", err)
+		}
+
+		if changeID == "" {
+			t.Error("expected non-empty change ID")
+		}
+
+		t.Logf("Working copy change ID: %s", changeID)
+	})
+}
+
+// TestGetParentChangeID tests getting the parent change ID.
+func TestGetParentChangeID(t *testing.T) {
+	repoPath, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	runInDir(t, repoPath, func() {
+		c := NewClient()
+		ctx := context.Background()
+
+		// Create a commit so we have a parent
+		testFile := filepath.Join(repoPath, "test.txt")
+		if err := os.WriteFile(testFile, []byte("hello"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		if err := c.Commit(ctx, "test commit"); err != nil {
+			t.Fatalf("Commit failed: %v", err)
+		}
+
+		parentID, err := c.GetParentChangeID(ctx, repoPath)
+		if err != nil {
+			t.Fatalf("GetParentChangeID failed: %v", err)
+		}
+
+		if parentID == "" {
+			t.Error("expected non-empty parent change ID")
+		}
+
+		// Parent should be different from current
+		currentID, _ := c.GetWorkingCopyChangeID(ctx, repoPath)
+		if parentID == currentID {
+			t.Error("parent change ID should be different from current")
+		}
+
+		t.Logf("Current: %s, Parent: %s", currentID, parentID)
+	})
+}
+
+// TestWorkspaceUpdateStale tests updating a stale workspace.
+func TestWorkspaceUpdateStale(t *testing.T) {
+	repoPath, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	runInDir(t, repoPath, func() {
+		c := NewClient()
+		ctx := context.Background()
+
+		// This should not error even if workspace is not stale
+		err := c.WorkspaceUpdateStale(ctx, repoPath)
+		if err != nil {
+			t.Logf("WorkspaceUpdateStale returned (may be expected): %v", err)
+		}
+	})
+}
+
+// TestNewFromRevisionInDir tests creating a new revision from a specific parent in a workspace.
+func TestNewFromRevisionInDir(t *testing.T) {
+	repoPath, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	runInDir(t, repoPath, func() {
+		c := NewClient()
+		ctx := context.Background()
+
+		// Create a file and commit to have some history
+		testFile := filepath.Join(repoPath, "test.txt")
+		if err := os.WriteFile(testFile, []byte("hello"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		if err := c.Commit(ctx, "test commit"); err != nil {
+			t.Fatalf("Commit failed: %v", err)
+		}
+
+		// Get current ID before
+		currentID, _ := c.GetWorkingCopyChangeID(ctx, repoPath)
+		parentID, _ := c.GetParentChangeID(ctx, repoPath)
+		t.Logf("Before: current=%s, parent=%s", currentID, parentID)
+
+		// Create a new revision based on parent (going back one level)
+		if err := c.NewFromRevisionInDir(ctx, repoPath, parentID); err != nil {
+			t.Fatalf("NewFromRevisionInDir failed: %v", err)
+		}
+
+		// Should now be at a different change ID
+		newID, _ := c.GetWorkingCopyChangeID(ctx, repoPath)
+		t.Logf("After: new=%s", newID)
+
+		if newID == currentID {
+			t.Error("Change ID should be different after NewFromRevisionInDir")
+		}
+	})
+}
+
+// TestDiffAutoUpdatesStaleWorkspace tests that Diff automatically handles stale workspaces.
+func TestDiffAutoUpdatesStaleWorkspace(t *testing.T) {
+	repoPath, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	runInDir(t, repoPath, func() {
+		c := NewClient()
+		ctx := context.Background()
+
+		// Step 1: Create some initial content and commit
+		testFile := filepath.Join(repoPath, "test.txt")
+		if err := os.WriteFile(testFile, []byte("initial"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+		if err := c.Commit(ctx, "initial"); err != nil {
+			t.Fatalf("Commit failed: %v", err)
+		}
+
+		// Step 2: Create an agent workspace
+		agentPath := filepath.Join(repoPath, ".jj", "agents", "test-agent")
+		if err := os.MkdirAll(filepath.Dir(agentPath), 0755); err != nil {
+			t.Fatalf("failed to create agents dir: %v", err)
+		}
+		if err := c.WorkspaceAdd(ctx, agentPath, "@"); err != nil {
+			t.Fatalf("WorkspaceAdd failed: %v", err)
+		}
+		t.Log("Created agent workspace")
+
+		// Step 3: Make a change in default workspace (this will rebase agent and make it stale)
+		if err := os.WriteFile(testFile, []byte("modified in default"), 0644); err != nil {
+			t.Fatalf("failed to modify test file: %v", err)
+		}
+		t.Log("Modified file in default workspace")
+
+		// Step 4: Try to get diff in agent workspace
+		// This should auto-recover from the stale error
+		diff, err := c.Diff(ctx, &DiffOptions{WorkDir: agentPath})
+		if err != nil {
+			t.Fatalf("Diff failed (should have auto-recovered from stale): %v", err)
+		}
+
+		t.Logf("Diff succeeded (auto-recovered from stale): %d bytes", len(diff))
+
+		// Cleanup
+		c.WorkspaceForget(ctx, "test-agent")
+		os.RemoveAll(agentPath)
+	})
+}

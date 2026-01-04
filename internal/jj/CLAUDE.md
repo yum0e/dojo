@@ -30,6 +30,10 @@ diff, err := client.Diff(ctx, &jj.DiffOptions{WorkDir: "/path"})
 
 - `WorkspaceForget()` only unregisters from jj - caller must delete the directory
 - `New()` creates an empty revision on top of the current working copy
+- `WorkspaceUpdateStale()` recovers workspaces that have diverged from the operation log
+- `Diff()` auto-recovers from stale workspace errors by calling `WorkspaceUpdateStale` and retrying
+- `NewInDir()` / `NewFromRevisionInDir()` create revisions in a specific workspace directory
+- `GetWorkingCopyChangeID()` / `GetParentChangeID()` query revision IDs for a workspace
 
 ## When to Look Here
 

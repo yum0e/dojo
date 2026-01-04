@@ -5,11 +5,11 @@ A TUI for orchestrating AI agents across jj workspaces.
 ## Quick Start
 
 ```bash
-# Run from any jj repository
-go run ./cmd/dojo
+# Build and run
+make run
 
-# Or build first
-go build -o dojo ./cmd/dojo
+# Or just build
+make build
 ./dojo
 ```
 
@@ -22,9 +22,8 @@ go build -o dojo ./cmd/dojo
 ## Development
 
 ```bash
-# Run tests
-go test ./...
-
-# Build
-go build ./...
+make build    # Build the binary
+make run      # Build and run
+make test     # Run tests
+make clean    # Remove build artifacts
 ```

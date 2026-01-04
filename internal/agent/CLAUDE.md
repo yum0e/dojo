@@ -117,6 +117,11 @@ if err == nil {
 - `Manager.Shutdown()` uses `sync.Once` to prevent double-close of the events channel
 - Always call `Shutdown()` when the app exits to clean up processes
 
+### Stale Workspace Handling
+- `StartAgent()` automatically calls `jj workspace update-stale` before starting
+- This prevents "stale working copy" errors when default workspace has changed
+- The jj `Diff()` function also auto-recovers from stale errors
+
 ### Error Visibility
 - Stderr from claude is captured and emitted as `EventError` with `[stderr]` prefix
 - Parse errors include the raw line that failed to parse
