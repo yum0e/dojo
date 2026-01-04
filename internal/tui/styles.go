@@ -50,6 +50,9 @@ const (
 	IndicatorIdle    = "○" // Gray - agent idle
 )
 
+// Spinner frames for activity indicator
+var SpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 var (
 	IndicatorDefaultStyle = lipgloss.NewStyle().
 				Foreground(colorMint)

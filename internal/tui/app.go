@@ -230,6 +230,20 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return SpawnAgentResultMsg{WorkspaceName: msg.WorkspaceName, Success: true}
 		}
 
+	case CancelAgentMsg:
+		// Stop the agent and restart it fresh
+		return m, func() tea.Msg {
+			ctx := context.Background()
+			// Stop the current agent
+			_ = m.agentManager.StopAgent(msg.WorkspaceName)
+			// Restart it so it's ready for the next prompt
+			err := m.agentManager.StartAgent(ctx, msg.WorkspaceName)
+			if err != nil {
+				return AgentCrashedMsg{WorkspaceName: msg.WorkspaceName, Error: err}
+			}
+			return SpawnAgentResultMsg{WorkspaceName: msg.WorkspaceName, Success: true}
+		}
+
 	case AgentEventMsg:
 		// Route to right pane
 		var cmd tea.Cmd

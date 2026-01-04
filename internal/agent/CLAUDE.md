@@ -32,7 +32,7 @@ Manager
 The claude subprocess is started with these flags:
 
 ```bash
-claude -p --verbose --input-format stream-json --output-format stream-json
+claude -p --verbose --input-format stream-json --output-format stream-json --add-dir <workspace>
 ```
 
 | Flag                           | Required | Purpose                                      |
@@ -41,6 +41,7 @@ claude -p --verbose --input-format stream-json --output-format stream-json
 | `--verbose`                    | Yes      | Required when using `--output-format stream-json` |
 | `--input-format stream-json`   | Yes      | Accept streaming JSON input on stdin         |
 | `--output-format stream-json`  | Yes      | Output streaming JSON on stdout              |
+| `--add-dir <workspace>`        | Yes      | Allow editing files in the agent's workspace |
 
 ### Input Message Format
 

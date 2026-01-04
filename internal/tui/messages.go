@@ -103,3 +103,11 @@ type AgentCrashedMsg struct {
 
 // StatusFlashClearMsg clears the status flash message.
 type StatusFlashClearMsg struct{}
+
+// SpinnerTickMsg advances the spinner animation.
+type SpinnerTickMsg struct{}
+
+// CancelAgentMsg requests cancellation of the current agent operation.
+type CancelAgentMsg struct {
+	WorkspaceName string
+}

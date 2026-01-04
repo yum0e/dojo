@@ -42,8 +42,8 @@ AppModel
 
 - Vim-style input: Normal mode (j/k scroll, i insert) and Insert mode (Enter submit, Shift+Enter newline)
 - Smart scroll: auto-scrolls only when at bottom
-- Tool states: compact display for success, auto-expand on error
-- Processing indicator: shows "thinking..." while waiting for agent response
+- Activity spinner: shows animated spinner with current activity (e.g., "ls -la", "reading file.go", "task: explore codebase")
+- Cancel: press Esc in normal mode to cancel current operation
 - Auto-spawn: agents spawned automatically when entering Chat tab
 
 ## Workspace Management
@@ -97,7 +97,9 @@ app.Shutdown()                   // 6. Cleanup on exit
 | `SpawnAgentResultMsg` | Result of spawn attempt                    |
 | `ChatInputMsg`        | Send user input to agent                   |
 | `RestartAgentMsg`     | Restart crashed agent                      |
+| `CancelAgentMsg`      | Cancel current agent operation (Esc key)   |
 | `StatusFlashClearMsg` | Clear temporary error flash                |
+| `SpinnerTickMsg`      | Advances spinner animation frame           |
 
 ## When to Look Here
 

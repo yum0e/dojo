@@ -190,30 +190,28 @@ func TestChatViewHandlesToolUse(t *testing.T) {
 			Data: agent.ToolUseData{
 				ToolID:   "tool_123",
 				ToolName: "Read",
+				Input:    `{"file_path":"/tmp/test.go"}`,
 			},
 		},
 	})
 
-	// Should have 1 tool message
-	if len(chat.messages) != 1 {
-		t.Fatalf("Expected 1 message, got %d", len(chat.messages))
+	// Tool messages are no longer added to chat - only shown in spinner
+	if len(chat.messages) != 0 {
+		t.Fatalf("Expected 0 messages (tools shown in spinner), got %d", len(chat.messages))
 	}
 
-	if chat.messages[0].Role != RoleTool {
-		t.Errorf("Expected RoleTool, got %v", chat.messages[0].Role)
-	}
-
-	if chat.messages[0].ToolID != "tool_123" {
-		t.Errorf("Expected tool_123, got %q", chat.messages[0].ToolID)
-	}
-
-	// Should have tool state
+	// Should have tool state tracked
 	if chat.toolStates["tool_123"] == nil {
 		t.Fatal("Expected tool state to be tracked")
 	}
 
 	if chat.toolStates["tool_123"].Status != ToolInProgress {
 		t.Errorf("Expected ToolInProgress, got %v", chat.toolStates["tool_123"].Status)
+	}
+
+	// Should update current activity
+	if chat.currentActivity != "reading /tmp/test.go" {
+		t.Errorf("Expected 'reading /tmp/test.go', got %q", chat.currentActivity)
 	}
 }
 
@@ -284,23 +282,37 @@ func TestChatInputCreatesUserMessage(t *testing.T) {
 		t.Errorf("Expected 'hello', got %q", chat.messages[0].Content)
 	}
 
-	// Should return ChatInputMsg command
+	// Should return batch command (ChatInputMsg + spinnerTickCmd)
 	if cmd == nil {
 		t.Fatal("Expected command")
 	}
 
-	result := cmd()
-	chatInput, ok := result.(ChatInputMsg)
+	// Execute batch and find ChatInputMsg
+	batchResult := cmd()
+	batchMsgs, ok := batchResult.(tea.BatchMsg)
 	if !ok {
-		t.Fatalf("Expected ChatInputMsg, got %T", result)
+		t.Fatalf("Expected tea.BatchMsg, got %T", batchResult)
 	}
 
-	if chatInput.Input != "hello" {
-		t.Errorf("Expected input='hello', got %q", chatInput.Input)
+	var foundChatInput bool
+	for _, batchCmd := range batchMsgs {
+		if batchCmd == nil {
+			continue
+		}
+		result := batchCmd()
+		if chatInput, ok := result.(ChatInputMsg); ok {
+			foundChatInput = true
+			if chatInput.Input != "hello" {
+				t.Errorf("Expected input='hello', got %q", chatInput.Input)
+			}
+			if chatInput.Workspace != "test-agent" {
+				t.Errorf("Expected workspace='test-agent', got %q", chatInput.Workspace)
+			}
+		}
 	}
 
-	if chatInput.Workspace != "test-agent" {
-		t.Errorf("Expected workspace='test-agent', got %q", chatInput.Workspace)
+	if !foundChatInput {
+		t.Fatal("Expected ChatInputMsg in batch")
 	}
 
 	// Input buffer should be cleared

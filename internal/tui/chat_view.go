@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -65,8 +66,11 @@ type ChatViewModel struct {
 	toolStates         map[string]*ToolState
 	focused            bool
 	width, height      int
-	atBottom           bool // For smart scroll
-	waitingForResponse bool // True after sending message, until agent responds
+	atBottom           bool   // For smart scroll
+	waitingForResponse bool   // True after sending message, until agent responds
+	spinnerFrame       int    // Current spinner animation frame
+	spinnerActive      bool   // True when spinner tick timer is running
+	currentActivity    string // What Claude is currently doing (e.g., "Bash: ls -la")
 }
 
 // NewChatViewModel creates a new chat view model.
@@ -99,14 +103,134 @@ func (m ChatViewModel) Update(msg tea.Msg) (ChatViewModel, tea.Cmd) {
 
 	case AgentEventMsg:
 		return m.handleAgentEvent(msg.Event)
+
+	case SpinnerTickMsg:
+		if m.shouldShowSpinner() {
+			m.spinnerFrame = (m.spinnerFrame + 1) % len(SpinnerFrames)
+			return m, m.spinnerTickCmd()
+		}
+		// Spinner should stop
+		m.spinnerActive = false
+		return m, nil
 	}
 
 	return m, nil
 }
 
+// shouldShowSpinner returns true if we should show the spinner.
+func (m ChatViewModel) shouldShowSpinner() bool {
+	return m.waitingForResponse || m.hasInProgressTools()
+}
+
+// hasInProgressTools checks if any tool is currently in progress.
+func (m ChatViewModel) hasInProgressTools() bool {
+	for _, ts := range m.toolStates {
+		if ts.Status == ToolInProgress {
+			return true
+		}
+	}
+	return false
+}
+
+// spinnerTickCmd returns a command that sends a spinner tick after a delay.
+func (m ChatViewModel) spinnerTickCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return SpinnerTickMsg{}
+	})
+}
+
+// startSpinner starts the spinner if not already running.
+// Returns the updated model and command.
+func (m ChatViewModel) startSpinner() (ChatViewModel, tea.Cmd) {
+	if m.spinnerActive {
+		return m, nil
+	}
+	m.spinnerActive = true
+	return m, m.spinnerTickCmd()
+}
+
+// formatToolActivity formats the current activity string based on tool name and input.
+func (m ChatViewModel) formatToolActivity(toolName, input string) string {
+	switch toolName {
+	case "Bash":
+		// Parse command from Bash tool input JSON
+		var bashInput struct {
+			Command string `json:"command"`
+		}
+		if err := json.Unmarshal([]byte(input), &bashInput); err == nil && bashInput.Command != "" {
+			cmd := bashInput.Command
+			// Truncate long commands
+			if len(cmd) > 60 {
+				cmd = cmd[:57] + "..."
+			}
+			return cmd
+		}
+		return "running command"
+	case "Read":
+		var readInput struct {
+			FilePath string `json:"file_path"`
+		}
+		if err := json.Unmarshal([]byte(input), &readInput); err == nil && readInput.FilePath != "" {
+			return "reading " + readInput.FilePath
+		}
+		return "reading file"
+	case "Write":
+		var writeInput struct {
+			FilePath string `json:"file_path"`
+		}
+		if err := json.Unmarshal([]byte(input), &writeInput); err == nil && writeInput.FilePath != "" {
+			return "writing " + writeInput.FilePath
+		}
+		return "writing file"
+	case "Edit":
+		var editInput struct {
+			FilePath string `json:"file_path"`
+		}
+		if err := json.Unmarshal([]byte(input), &editInput); err == nil && editInput.FilePath != "" {
+			return "editing " + editInput.FilePath
+		}
+		return "editing file"
+	case "Glob":
+		var globInput struct {
+			Pattern string `json:"pattern"`
+		}
+		if err := json.Unmarshal([]byte(input), &globInput); err == nil && globInput.Pattern != "" {
+			return "searching " + globInput.Pattern
+		}
+		return "searching files"
+	case "Grep":
+		var grepInput struct {
+			Pattern string `json:"pattern"`
+		}
+		if err := json.Unmarshal([]byte(input), &grepInput); err == nil && grepInput.Pattern != "" {
+			return "grep " + grepInput.Pattern
+		}
+		return "searching content"
+	case "Task":
+		var taskInput struct {
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal([]byte(input), &taskInput); err == nil && taskInput.Description != "" {
+			return "task: " + taskInput.Description
+		}
+		return "running task"
+	default:
+		return toolName
+	}
+}
+
 // handleNormalMode handles keys in normal mode.
 func (m ChatViewModel) handleNormalMode(msg tea.KeyMsg) (ChatViewModel, tea.Cmd) {
 	switch msg.String() {
+	case "esc":
+		// Cancel current operation if agent is working
+		if m.shouldShowSpinner() {
+			m.waitingForResponse = false
+			m.currentActivity = ""
+			return m, func() tea.Msg {
+				return CancelAgentMsg{WorkspaceName: m.workspace}
+			}
+		}
 	case "j", "down":
 		m.scrollY++
 		m.clampScroll()
@@ -156,15 +280,24 @@ func (m ChatViewModel) handleInsertMode(msg tea.KeyMsg) (ChatViewModel, tea.Cmd)
 
 			// Show processing indicator
 			m.waitingForResponse = true
+			m.currentActivity = "thinking"
 
 			// Auto-scroll to bottom
 			m.atBottom = true
 			m.scrollY = m.maxScroll()
 
+			// Start spinner if not already running
+			var spinnerCmd tea.Cmd
+			m, spinnerCmd = m.startSpinner()
+
 			// Always send immediately - Claude handles concurrent messages
-			return m, func() tea.Msg {
+			cmds := []tea.Cmd{func() tea.Msg {
 				return ChatInputMsg{Workspace: m.workspace, Input: input}
+			}}
+			if spinnerCmd != nil {
+				cmds = append(cmds, spinnerCmd)
 			}
+			return m, tea.Batch(cmds...)
 		}
 	case "shift+enter":
 		// Insert newline
@@ -238,19 +371,20 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 			// Agent is responding with tool use, clear waiting state
 			m.waitingForResponse = false
 
+			// Track tool state (for checking in-progress tools)
 			m.toolStates[data.ToolID] = &ToolState{
 				Name:   data.ToolName,
 				Status: ToolInProgress,
 			}
-			m.messages = append(m.messages, ChatMessage{
-				Role:      RoleTool,
-				Content:   data.ToolName,
-				Timestamp: time.Now(),
-				ToolID:    data.ToolID,
-			})
 
-			if m.atBottom {
-				m.scrollY = m.maxScroll()
+			// Update current activity with tool details (shown in spinner)
+			m.currentActivity = m.formatToolActivity(data.ToolName, data.Input)
+
+			// Start spinner if not already running
+			var spinnerCmd tea.Cmd
+			m, spinnerCmd = m.startSpinner()
+			if spinnerCmd != nil {
+				cmds = append(cmds, spinnerCmd)
 			}
 		}
 
@@ -265,12 +399,17 @@ func (m ChatViewModel) handleAgentEvent(evt agent.Event) (ChatViewModel, tea.Cmd
 					ts.Expanded = true // Auto-expand on error
 				}
 			}
+			// Check if this was the last running tool
+			if !m.hasInProgressTools() {
+				m.currentActivity = ""
+			}
 		}
 
 	case agent.EventError:
 		if data, ok := evt.Data.(agent.ErrorData); ok {
 			// Clear waiting state on error
 			m.waitingForResponse = false
+			m.currentActivity = ""
 
 			m.messages = append(m.messages, ChatMessage{
 				Role:      RoleError,
@@ -311,9 +450,15 @@ func (m ChatViewModel) View() string {
 		lines = append(lines, m.renderMessage(msg)...)
 	}
 
-	// Show processing indicator when waiting for response
-	if m.waitingForResponse {
-		lines = append(lines, ChatProcessingStyle.Render("  thinking..."))
+	// Show spinner with current activity
+	if m.shouldShowSpinner() {
+		spinner := SpinnerFrames[m.spinnerFrame]
+		activity := m.currentActivity
+		if activity == "" {
+			activity = "thinking"
+		}
+		activityLine := "  " + IndicatorRunningStyle.Render(spinner) + " " + ChatProcessingStyle.Render(activity)
+		lines = append(lines, activityLine)
 	}
 
 	// Apply scrolling
@@ -354,33 +499,6 @@ func (m ChatViewModel) renderMessage(msg ChatMessage) []string {
 		prefix := ChatAgentStyle.Render("Agent: ")
 		content := msg.Content
 		return wrapLines(prefix+content, m.width)
-
-	case RoleTool:
-		ts := m.toolStates[msg.ToolID]
-		if ts == nil {
-			return []string{ChatToolStyle.Render("  " + IndicatorRunning + " " + msg.Content)}
-		}
-
-		var indicator string
-		switch ts.Status {
-		case ToolInProgress:
-			indicator = IndicatorRunningStyle.Render(IndicatorRunning)
-		case ToolSuccess:
-			indicator = ChatToolSuccessStyle.Render("✓")
-		case ToolError:
-			indicator = ChatToolErrorStyle.Render("✗")
-		}
-
-		line := ChatToolStyle.Render("  " + indicator + " " + ts.Name)
-		lines := []string{line}
-
-		// Show expanded output
-		if ts.Expanded && ts.Output != "" {
-			for _, l := range strings.Split(ts.Output, "\n") {
-				lines = append(lines, "    "+l)
-			}
-		}
-		return lines
 
 	case RoleError:
 		prefix := ErrorStyle.Render("Error: ")

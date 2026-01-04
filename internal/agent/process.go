@@ -55,6 +55,7 @@ func (p *Process) Start(ctx context.Context) error {
 		"--verbose",                         // Required for stream-json output
 		"--input-format", "stream-json",     // Accept streaming JSON input
 		"--output-format", "stream-json",    // Output streaming JSON
+		"--add-dir", p.WorkDir,              // Allow editing files in workspace
 	)
 	p.cmd.Dir = p.WorkDir
 
