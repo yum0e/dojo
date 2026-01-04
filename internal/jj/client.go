@@ -35,7 +35,16 @@ func WithJJPath(path string) Option {
 // run executes a jj command and returns the stdout output.
 // The caller is responsible for setting the working directory.
 func (c *Client) run(ctx context.Context, args ...string) (string, error) {
+	return c.runInDir(ctx, "", args...)
+}
+
+// runInDir executes a jj command in a specific directory.
+// If dir is empty, uses the current working directory.
+func (c *Client) runInDir(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, c.jjPath, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
