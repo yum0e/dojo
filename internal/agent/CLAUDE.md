@@ -138,6 +138,7 @@ if err == nil {
 ### Workspace Isolation
 - Each agent's working directory is set to its workspace via `cmd.Dir`
 - `--add-dir` restricts file editing to the workspace only
+- Agent PATH is prefixed with a workspace-local shim that blocks `git` (forces `jj`)
 - Agents see full project context (jj provides revision-level isolation)
 
 ### Testing

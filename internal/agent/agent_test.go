@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -807,6 +808,52 @@ func TestWorkspaceIsolation_IsolatedEnv(t *testing.T) {
 		if len(e) > 7 && e[:7] == "OLDPWD=" {
 			t.Error("OLDPWD should not be present in isolated env")
 		}
+	}
+}
+
+func TestEnsureGitShimCreatesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	proc := NewProcess("test-agent", tmpDir, nil)
+
+	shimDir, err := proc.ensureGitShim()
+	if err != nil {
+		t.Fatalf("ensureGitShim() error = %v", err)
+	}
+
+	if shimDir != filepath.Join(tmpDir, gitShimDirName) {
+		t.Fatalf("ensureGitShim() dir = %v, want %v", shimDir, filepath.Join(tmpDir, gitShimDirName))
+	}
+
+	name, _, _ := gitShimSpec()
+	shimPath := filepath.Join(shimDir, name)
+	info, err := os.Stat(shimPath)
+	if err != nil {
+		t.Fatalf("failed to stat git shim: %v", err)
+	}
+	if info.IsDir() {
+		t.Fatal("git shim should be a file, not a directory")
+	}
+}
+
+func TestPrependPath(t *testing.T) {
+	env := []string{"FOO=bar", "PATH=/usr/bin"}
+	updated := prependPath(env, "/tmp/shim")
+
+	var got string
+	for _, e := range updated {
+		if strings.HasPrefix(e, "PATH=") {
+			got = strings.TrimPrefix(e, "PATH=")
+			break
+		}
+	}
+	if got == "" {
+		t.Fatal("PATH not found in updated env")
+	}
+
+	sep := string(os.PathListSeparator)
+	wantPrefix := "/tmp/shim" + sep
+	if !strings.HasPrefix(got, wantPrefix) {
+		t.Fatalf("PATH prefix = %q, want prefix %q", got, wantPrefix)
 	}
 }
 

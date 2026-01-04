@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -30,6 +32,8 @@ type Process struct {
 	mu sync.RWMutex
 }
 
+const gitShimDirName = ".dojo-bin"
+
 // NewProcess creates a new Process instance.
 func NewProcess(name, workDir string, events chan<- Event) *Process {
 	return &Process{
@@ -38,6 +42,48 @@ func NewProcess(name, workDir string, events chan<- Event) *Process {
 		State:   StateIdle,
 		events:  events,
 	}
+}
+
+func gitShimSpec() (string, []byte, os.FileMode) {
+	if runtime.GOOS == "windows" {
+		return "git.cmd", []byte("@echo off\r\necho git disabled for agents; use jj 1>&2\r\nexit /b 1\r\n"), 0644
+	}
+	return "git", []byte("#!/bin/sh\necho \"git disabled for agents; use jj\" >&2\nexit 1\n"), 0755
+}
+
+func (p *Process) ensureGitShim() (string, error) {
+	dir := filepath.Join(p.WorkDir, gitShimDirName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+
+	name, contents, mode := gitShimSpec()
+	if err := os.WriteFile(filepath.Join(dir, name), contents, mode); err != nil {
+		return "", err
+	}
+
+	return dir, nil
+}
+
+func prependPath(env []string, dir string) []string {
+	if dir == "" {
+		return env
+	}
+
+	prefix := "PATH="
+	for i, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			existing := strings.TrimPrefix(e, prefix)
+			if existing == "" {
+				env[i] = prefix + dir
+			} else {
+				env[i] = prefix + dir + string(os.PathListSeparator) + existing
+			}
+			return env
+		}
+	}
+
+	return append(env, prefix+dir)
 }
 
 // isolatedEnv creates an environment where the agent only knows about its workspace.
@@ -78,6 +124,12 @@ func (p *Process) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 
+	shimDir, err := p.ensureGitShim()
+	if err != nil {
+		cancel()
+		return fmt.Errorf("failed to create git shim: %w", err)
+	}
+
 	p.cmd = exec.CommandContext(ctx, "claude",
 		"-p",                                // Print mode (non-interactive)
 		"--verbose",                         // Required for stream-json output
@@ -88,7 +140,7 @@ func (p *Process) Start(ctx context.Context) error {
 	p.cmd.Dir = p.WorkDir // This is the cd - process starts in workspace
 
 	// Set up isolated environment - agent only knows about its workspace
-	p.cmd.Env = p.isolatedEnv()
+	p.cmd.Env = prependPath(p.isolatedEnv(), shimDir)
 
 	stdin, err := p.cmd.StdinPipe()
 	if err != nil {
