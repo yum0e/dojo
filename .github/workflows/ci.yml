@@ -24,6 +24,7 @@ jobs:
         run: |
           curl -LsSf https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz | tar xzf - -C /usr/local/bin
           cargo-binstall --no-confirm jj-cli
+          jj git init
 
       - name: Test
         run: uv run --python ${{ matrix.python-version }} --with pytest pytest tests/ -v
