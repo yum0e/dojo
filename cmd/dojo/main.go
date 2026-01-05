@@ -171,7 +171,7 @@ func listWorkspaces() {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
 			fmt.Println(entry.Name())
 		}
 	}

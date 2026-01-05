@@ -1,264 +1,104 @@
-# Dojo - Architecture & Milestones
+# Dojo Spec: Minimal CLI Wrapper
 
 ## Overview
 
-Dojo is a TUI that leverages Jujutsu (jj) workspaces to manage AI agents like Claude Code. The core insight: jj workspaces provide isolated working directories sharing the same repo, perfect for parallel agent work with easy merging and rollback.
+A minimal CLI that launches Claude Code directly in an isolated jj workspace. Users get the full Claude terminal experience without recreation.
 
-## Key Decisions
+## Motivation
 
-### Language & Framework
+- No need to recreate Claude's UI (syntax highlighting, markdown, tool visualization)
+- Focus on core value: workspace isolation and version control orchestration
+- Simple codebase (~150 LOC)
 
-| Decision      | Choice    | Rationale                                                                |
-| ------------- | --------- | ------------------------------------------------------------------------ |
-| Language      | Go        | Single binary distribution, fast compilation, easy cross-platform builds |
-| TUI Framework | Bubbletea | Elm architecture fits stateful multi-pane UI, excellent ecosystem        |
-| Styling       | Lipgloss  | Pairs with bubbletea, declarative styling                                |
-| Components    | Bubbles   | Pre-built viewport, text input, list components                          |
+## Commands
 
-Alternatives considered:
+### `dojo <name>`
 
-- **Rust + Ratatui**: Rejected due to slow compilation impacting dev feedback loop
-- **Python + Textual**: Rejected due to painful distribution (no single binary)
-- **TypeScript + Ink**: Rejected due to Node runtime requirement
-
-### Agent Execution
-
-**Decision**: Spawn Claude Code CLI as subprocesses (not direct API calls)
-
-Rationale:
-
-- Leverage existing Claude Code agent logic
-- Simpler implementation for MVP
-- Claude Code handles tool use, context, etc.
-
-Each agent runs in its own jj workspace via:
-
-```bash
-jj workspace add agent-1
-cd $(jj workspace root --workspace agent-1)
-claude
-```
-
-### TUI Layout
+Creates an isolated workspace and launches Claude interactively.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         DOJO                                │
-├─────────────────┬───────────────────────────────────────────┤
-│  WORKSPACES     │  [Chat] [Diff] [History]                  │
-│  (always visible)│                                          │
-│                 │  Tab-based main view                      │
-│  ● default      │                                           │
-│  ◐ agent-1      │  Content changes based on selected tab    │
-│  ◐ agent-2      │  and selected workspace                   │
-│                 │                                           │
-└─────────────────┴───────────────────────────────────────────┘
+$ dojo feature-auth
+[Creates workspace, launches Claude]
+[User interacts with full Claude UI]
+[On exit]
+Keep workspace for inspection? [y/N] _
 ```
 
-- **Left pane**: Workspace list, always visible (like chat app sidebar)
-- **Right pane**: Tabbed view (Chat | Diff | History)
-- **Coupling**: Selected workspace determines what chat/diff/history shows
+**Flow:**
 
-### Workspace Mental Model
+1. Create jj workspace at `.jj/agents/<name>/`
+2. Create `.git` marker file (scopes Claude to workspace)
+3. Set up git shim in PATH (blocks git, forces jj)
+4. Fork Claude process with full terminal passthrough
+5. Wait for Claude to exit
+6. Prompt: "Keep workspace for inspection? [y/N]"
+7. If no: `jj workspace forget <name>` + remove directory
 
-| Workspace | Owner | Behavior                                 |
-| --------- | ----- | ---------------------------------------- |
-| `default` | User  | User's editing space, external `$EDITOR` |
-| `agent-*` | Agent | Managed by dojo, Claude Code subprocess  |
+### `dojo list`
 
-- User edits happen in default workspace via `$EDITOR`
-- TUI refreshes when editor returns
-- Agent workspaces are created/deleted automatically by dojo
-- Visual distinction between user diffs and agent diffs
+Shows existing agent workspaces.
 
-### File Editing
+```
+$ dojo list
+feature-auth
+bugfix-login
+refactor-api
+```
 
-**Decision**: External `$EDITOR`, not built-in editor
+## Workspace Isolation
 
-Rationale:
+### Directory Structure
 
-- Users have muscle memory with their editor
-- No need to know about workspaces (always editing in default)
-- Simpler MVP implementation
-- TUI detects changes on editor return and refreshes
+```
+repository/
+├── .jj/
+│   ├── agents/
+│   │   ├── <name>/           ← Agent workspace
+│   │   │   ├── .git          ← Marker file (scope isolation)
+│   │   │   ├── .jj/
+│   │   │   │   └── .dojo-bin/
+│   │   │   │       └── git   ← Shim script
+│   │   │   └── [project files]
+│   │   └── ...
+│   └── [jj metadata]
+└── [default workspace]
+```
 
-### Session Persistence
+### .git Marker
 
-**Decision**: Full session restore (mandatory)
+- Empty file at `<workspace>/.git`
+- Prevents Claude from detecting parent jj repo
+- Makes Claude treat workspace as standalone project root
 
-Stored in `~/.config/dojo/` (XDG compliant):
+### Git Shim
 
-- Active workspaces and their state
-- Conversation history per workspace
-- UI state (selected workspace, active tab, scroll positions)
-- Running agent processes (reconnect or show status)
+- Script at `<workspace>/.jj/.dojo-bin/git`
+- Returns exit 1 with message "git disabled for agents; use jj"
+- PATH prepended so shim shadows real git
 
-Without session restore, the tool is unusable for real workflows.
+## Multi-Agent Model
 
-### jj Operations (MVP)
+- User opens multiple terminals for multiple agents
+- Each `dojo <name>` is independent
+- No centralized orchestration
+- Version control via jj directly in default workspace
 
-**Basic** (required):
+## Design Decisions
 
-- `jj workspace add <name>` - Create agent workspace
-- `jj workspace delete <name>` - Cleanup agent workspace
-- `jj workspace list` - List all workspaces
-- `jj diff` - Show changes in workspace
-- `jj commit -m <msg>` - Commit changes
-- `jj git push` - Push to GitHub
-
-**Intermediate** (required for MVP):
-
-- `jj squash` - Squash changes into parent
-- `jj rebase -d <dest>` - Rebase onto destination
-- `jj describe -m <msg>` - Update commit message
-
-**Deferred**:
-
-- `jj split` - Split commits
-- `jj absorb` - Auto-absorb fixups
-- Conflict resolution UI
-
-### Scope
-
-- **Single repo**: One repo at a time, opened like `dojo ~/myproject`
-- **MVP agents**: 2 concurrent agents in 2 workspaces
-- **Bootstrap goal**: Build dojo using dojo
-
----
-
-## Milestones
-
-### M1: Scaffold
-
-- [x] Initialize Go module (`go mod init github.com/user/dojo`)
-- [x] Basic bubbletea app structure
-- [x] Renders "Hello Dojo" with lipgloss styling
-- [x] Project directory structure in place
-
-### M2: jj Client ✓
-
-- [x] `internal/jj/errors.go` - Typed errors (ErrWorkspaceExists, ErrWorkspaceNotFound, ErrNotJJRepo)
-- [x] `internal/jj/client.go` - Execute jj commands, parse output (CWD-based)
-- [x] `internal/jj/workspace.go` - add (at change ID), delete, list workspaces
-- [x] `internal/jj/diff.go` - Get diff as raw string
-- [x] `internal/jj/log.go` - Get and parse log (change ID, message, author, date)
-- [x] `internal/jj/status.go` - Get working copy status
-- [x] `internal/jj/ops.go` - commit, squash, rebase, describe, git push
-- [x] Integration tests with real jj + temp repos
-
-### M3: Workspace List Pane ✓
-
-- [x] Left pane component with workspace list
-- [x] Keyboard navigation (j/k or arrows)
-- [x] Visual indicators: ● default, ◐ agent (running), ○ agent (idle)
-- [x] Selection state management
-
-### M4: Agent Spawning
-
-- [ ] `internal/agent/manager.go` - Track multiple agents
-- [ ] `internal/agent/process.go` - Spawn Claude Code subprocess
-- [ ] `internal/agent/protocol.go` - Parse Claude Code output stream
-- [ ] Create workspace before spawning agent
-- [ ] Route agent output to correct workspace state
-
-### M5: Chat View
-
-- [ ] Chat tab component
-- [ ] Display messages (user + agent) with styling
-- [ ] Text input for user messages
-- [ ] Send to agent subprocess stdin
-- [ ] Auto-scroll, viewport for history
-
-### M6: Diff View
-
-- [ ] Diff tab component
-- [ ] Syntax-highlighted diff display
-- [ ] Auto-refresh on file changes (fsnotify or polling)
-- [ ] Visual distinction: user changes vs agent changes
-- [ ] Open in `$EDITOR` action (press 'e')
-
-### M7: Session Persistence
-
-- [ ] `internal/session/state.go` - App state struct
-- [ ] `internal/session/store.go` - Save/load JSON to XDG config
-- [ ] Save on exit, load on start
-- [ ] Handle stale agent processes (died while closed)
-
-### M8: jj Operations UI
-
-- [ ] Command palette or keybindings for jj ops
-- [ ] Squash workflow (select commits)
-- [ ] Rebase workflow (select destination)
-- [ ] Describe (edit commit message)
-- [ ] Git push with status feedback
-
----
+| Question       | Decision                                                        |
+| -------------- | --------------------------------------------------------------- |
+| TTY approach   | Fork with terminal passthrough (not exec, not PTY multiplexing) |
+| Workspace UI   | None - CLI only                                                 |
+| Diff view      | None - Claude can run jj commands                               |
+| Multi-agent    | Separate terminals                                              |
+| CLI commands   | `dojo <name>`, `dojo list`                                      |
+| Git shim       | Keep (forces jj usage)                                          |
+| Claude args    | None - user interacts directly                                  |
+| Crash cleanup  | Prompt user "Keep workspace?"                                   |
+| Workspace path | `.jj/agents/<name>/` (invisible to user)                        |
 
 ## Dependencies
 
-```go
-require (
-    github.com/charmbracelet/bubbletea   v1.x
-    github.com/charmbracelet/lipgloss    v1.x
-    github.com/charmbracelet/bubbles     v0.x
-    github.com/adrg/xdg                  v0.x
-)
-```
-
-Optional:
-
-- `github.com/fsnotify/fsnotify` - File watching for diff refresh
-- `github.com/alecthomas/chroma` - Syntax highlighting for diffs
-
----
-
-## Open Questions (for future specs)
-
-1. **Agent protocol**: How to structure Claude Code communication? Raw stdio? JSON messages?
-2. **Workspace naming**: Auto-generated (`agent-1`) or user-named?
-3. **History view**: ASCII DAG like `jj log` or simplified list?
-4. **Keybindings**: Vim-style? Configurable?
-5. **Theming**: Dark/light? Configurable colors?
-
----
-
-## Bootstrap Strategy
-
-The goal is to build dojo using dojo itself. Bootstrap sequence:
-
-1. Build M1-M3 manually (basic TUI without agents)
-2. Use early dojo to manage agents for M4-M5
-3. Full dogfooding from M6 onwards
-
----
-
-## Interview Findings (2026-01-04)
-
-### M2: jj Client
-
-**Design Decisions**:
-
-| Topic | Decision |
-|-------|----------|
-| Error handling | Typed errors: `ErrWorkspaceExists`, `ErrWorkspaceNotFound`, `ErrNotJJRepo` |
-| Output parsing | Default text format (regex/string parsing, not JSON) |
-| Diff format | Raw string for display (no structured parsing) |
-| Client context | CWD-based (caller manages directory) |
-| Revision spec | jj Change IDs (e.g., `kpqxywon`) |
-| Testing | Real jj + temp repos (integration-style tests) |
-| Validation | Lazy (fail on first command, no eager check) |
-| Concurrency | Support concurrent calls (mutex for cached state) |
-| Git auth | Assume SSH/credential helper pre-configured |
-| Undo tracking | Deferred to later milestone |
-
-**Scope Additions** (beyond original spec):
-- `jj log` → parsed into commits (change ID, message, author, date)
-- `jj status` → working copy state
-
-**Workspace Model Clarification**:
-- User chooses revision (change ID) and workspace name
-- Path is internally created and tracked by TUI
-- Goal: abstract workspace complexity from user
-
-**Concurrency Note**:
-jj uses file locks per workspace. Concurrent reads are safe. Concurrent writes to same workspace could race, but jj handles gracefully. Consider mutex if caching workspace lists in Go client.
+- `os/exec` (stdlib)
+- `internal/jj` (workspace operations)
+- No external libraries
