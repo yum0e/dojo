@@ -27,18 +27,17 @@ Keep workspace for inspection? [y/N] _
 
 **Flow:**
 
-1. Find root workspace (follows `.dojo-agent` marker if run from agent)
+1. Find root workspace (follows `.jj/dojo-agent` marker if run from agent)
 2. Check parent directory is writable
-3. Create jj workspace as sibling: `../<repo>-<name>/`
-4. Create `.dojo-agent` marker file (JSON with root path, agent name, timestamp)
-5. Create `.claude` symlink pointing to root's `.claude/` (permission inheritance)
-6. Create `.git` marker file (scopes Claude to workspace)
-7. Set up git shim in PATH (blocks git, forces jj)
-8. Fork Claude process with full terminal passthrough
-9. Wait for Claude to exit
-10. Warn if uncommitted changes detected
-11. Prompt: "Keep workspace for inspection? [y/N]"
-12. If no: cleanup (remove markers, forget workspace, delete directory)
+3. Create jj workspace as sibling: `../<repo>-<name>/` (full copy including `.claude/`)
+4. Create `.git` directory (scopes Claude to workspace, auto-ignored by jj)
+5. Create `.jj/dojo-agent` marker file (JSON with root path, agent name, timestamp, auto-ignored)
+6. Set up git shim in PATH (blocks git, forces jj)
+7. Fork Claude process with full terminal passthrough
+8. Wait for Claude to exit
+9. Warn if uncommitted changes detected
+10. Prompt: "Keep workspace for inspection? [y/N]"
+11. If no: cleanup (remove markers, forget workspace, delete directory)
 
 ### `dojo list`
 
@@ -58,23 +57,23 @@ bugfix-login: rstuvwxy a1b2c3d4 Fix login redirect
 /Users/dev/
 ├── myproject/                    <- Root workspace
 │   ├── .claude/
-│   │   └── settings.local.json   <- Permissions (shared)
+│   │   └── settings.local.json   <- Permissions
 │   ├── .jj/
 │   │   └── [jj metadata]
 │   └── [project files]
-└── myproject-feature-auth/       <- Agent workspace (sibling)
-    ├── .dojo-agent               <- Marker file (JSON)
-    ├── .claude -> ../myproject/.claude/  <- Symlink (permission inheritance)
-    ├── .git                      <- Marker file (scope isolation)
+└── myproject-feature-auth/       <- Agent workspace (sibling, full copy)
+    ├── .claude/                  <- Full copy (not symlink)
+    ├── .git/                     <- Empty directory (scope isolation, auto-ignored)
     ├── .jj/
+    │   ├── dojo-agent            <- Marker file (auto-ignored)
     │   └── .dojo-bin/
     │       └── git               <- Shim script
     └── [project files]
 ```
 
-### .dojo-agent Marker
+### .jj/dojo-agent Marker
 
-JSON file identifying agent workspaces:
+JSON file identifying agent workspaces (inside `.jj/` so auto-ignored by jj):
 
 ```json
 {
@@ -89,17 +88,12 @@ Used for:
 - Enabling nested `dojo` calls (from agent, creates sibling to original root)
 - Cleanup tracking
 
-### .claude Symlink
+### .git Directory
 
-- Symlink at `<workspace>/.claude` pointing to root's `.claude/`
-- Enables permission inheritance (no re-approval needed)
-- Uses relative path for portability
-
-### .git Marker
-
-- Empty file at `<workspace>/.git`
+- Empty directory at `<workspace>/.git`
 - Prevents Claude from detecting parent jj repo
 - Makes Claude treat workspace as standalone project root
+- Auto-ignored by jj (won't appear in `jj status`)
 
 ### Git Shim
 
@@ -120,9 +114,10 @@ Used for:
 | Question       | Decision                                                        |
 | -------------- | --------------------------------------------------------------- |
 | TTY approach   | Fork with terminal passthrough (not exec, not PTY multiplexing) |
-| Workspace path | Sibling: `../<repo>-<name>/` for visibility + permission inheritance |
-| Permissions    | Symlink `.claude/` to root for full inheritance                 |
-| Discovery      | `.dojo-agent` marker file (JSON)                                |
+| Workspace path | Sibling: `../<repo>-<name>/` for visibility                     |
+| Permissions    | Full copy of `.claude/` (jj workspace add copies everything)    |
+| Discovery      | `.jj/dojo-agent` marker file (JSON, auto-ignored)               |
+| jj status      | Clean - markers in `.jj/` or `.git/` are auto-ignored           |
 | List output    | Name + jj change-id + commit-id + summary                       |
 | Nesting        | Works - always creates siblings to original root                |
 | Cleanup        | Prompt on exit + warn about uncommitted changes                 |

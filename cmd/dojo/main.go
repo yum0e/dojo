@@ -16,7 +16,7 @@ import (
 
 const (
 	shimDir         = ".jj/.dojo-bin"
-	agentMarkerFile = ".dojo-agent"
+	agentMarkerFile = ".jj/dojo-agent" // Inside .jj so it's auto-ignored
 )
 
 // AgentMarker contains metadata stored in .dojo-agent file.
@@ -97,32 +97,6 @@ func createAgentMarker(workspacePath, rootPath, name string) error {
 	return os.WriteFile(filepath.Join(workspacePath, agentMarkerFile), data, 0644)
 }
 
-// setupClaudeSymlink creates .claude symlink pointing to root's .claude.
-func setupClaudeSymlink(workspacePath, rootPath string) error {
-	rootClaude := filepath.Join(rootPath, ".claude")
-	agentClaude := filepath.Join(workspacePath, ".claude")
-
-	// Only create if root has .claude directory
-	if _, err := os.Stat(rootClaude); os.IsNotExist(err) {
-		return nil // No .claude to symlink
-	}
-
-	// Remove existing .claude if present (jj workspace add copies it)
-	if _, err := os.Lstat(agentClaude); err == nil {
-		if err := os.RemoveAll(agentClaude); err != nil {
-			return fmt.Errorf("failed to remove existing .claude: %w", err)
-		}
-	}
-
-	// Create relative symlink (more portable)
-	relPath, err := filepath.Rel(workspacePath, rootClaude)
-	if err != nil {
-		return err
-	}
-
-	return os.Symlink(relPath, agentClaude)
-}
-
 // checkParentWritable verifies we can write to the parent directory.
 func checkParentWritable(rootPath string) error {
 	parentDir := filepath.Dir(rootPath)
@@ -179,29 +153,22 @@ func runAgent(name string) {
 		os.Exit(1)
 	}
 
-	// 5. Create .dojo-agent marker file
+	// 5. Create .git directory (scopes Claude to workspace, auto-ignored by jj)
+	gitDir := filepath.Join(workspacePath, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating .git directory: %v\n", err)
+		cleanup(ctx, client, jjWorkspaceName, workspacePath, root)
+		os.Exit(1)
+	}
+
+	// 6. Create .jj/dojo-agent marker file (inside .jj so auto-ignored)
 	if err := createAgentMarker(workspacePath, root, name); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating agent marker: %v\n", err)
 		cleanup(ctx, client, jjWorkspaceName, workspacePath, root)
 		os.Exit(1)
 	}
 
-	// 6. Create .claude symlink for permission inheritance
-	if err := setupClaudeSymlink(workspacePath, root); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating .claude symlink: %v\n", err)
-		cleanup(ctx, client, jjWorkspaceName, workspacePath, root)
-		os.Exit(1)
-	}
-
-	// 7. Create .git marker file (scopes Claude to workspace)
-	gitMarker := filepath.Join(workspacePath, ".git")
-	if err := os.WriteFile(gitMarker, []byte{}, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating .git marker: %v\n", err)
-		cleanup(ctx, client, jjWorkspaceName, workspacePath, root)
-		os.Exit(1)
-	}
-
-	// 8. Create git shim
+	// 7. Create git shim
 	if err := os.MkdirAll(shimPath, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating shim directory: %v\n", err)
 		cleanup(ctx, client, jjWorkspaceName, workspacePath, root)
@@ -219,7 +186,7 @@ exit 1
 		os.Exit(1)
 	}
 
-	// 9. Build env with shim in PATH
+	// 8. Build env with shim in PATH
 	env := os.Environ()
 	newPath := shimPath + ":" + os.Getenv("PATH")
 	for i, e := range env {
@@ -229,7 +196,7 @@ exit 1
 		}
 	}
 
-	// 10. Fork claude with Stdin/Stdout/Stderr passthrough
+	// 9. Fork claude with Stdin/Stdout/Stderr passthrough
 	cmd := exec.Command("claude")
 	cmd.Dir = workspacePath
 	cmd.Env = env
@@ -246,18 +213,18 @@ exit 1
 		}
 	}
 
-	// 11. Check for uncommitted changes and warn
+	// 10. Check for uncommitted changes and warn
 	if hasUncommittedChanges(ctx, client, workspacePath) {
 		fmt.Println("\nWarning: This workspace has uncommitted changes!")
 	}
 
-	// 12. Prompt for cleanup
+	// 11. Prompt for cleanup
 	fmt.Print("\nKeep workspace for inspection? [y/N] ")
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')
 	answer = strings.TrimSpace(strings.ToLower(answer))
 
-	// 13. If no: cleanup
+	// 12. If no: cleanup
 	if answer != "y" && answer != "yes" {
 		cleanup(ctx, client, jjWorkspaceName, workspacePath, root)
 		fmt.Printf("Workspace '%s' removed\n", name)
@@ -267,13 +234,10 @@ exit 1
 }
 
 func cleanup(ctx context.Context, client *jj.Client, jjWorkspaceName, workspacePath, rootPath string) {
-	// Remove .git marker first so jj can work properly
-	os.Remove(filepath.Join(workspacePath, ".git"))
+	// Remove .git directory first so jj can work properly
+	os.RemoveAll(filepath.Join(workspacePath, ".git"))
 
-	// Remove .claude symlink
-	os.Remove(filepath.Join(workspacePath, ".claude"))
-
-	// Remove .dojo-agent marker
+	// Remove .jj/dojo-agent marker (will be removed with directory anyway)
 	os.Remove(filepath.Join(workspacePath, agentMarkerFile))
 
 	// Forget workspace in jj (run from root workspace context)

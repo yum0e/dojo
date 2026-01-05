@@ -183,149 +183,6 @@ func TestCreateAgentMarker(t *testing.T) {
 	}
 }
 
-func TestSetupClaudeSymlink(t *testing.T) {
-	dir, cleanup := setupTestRepo(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	client := jj.NewClient()
-
-	// Create .claude directory in root
-	rootClaude := filepath.Join(dir, ".claude")
-	if err := os.MkdirAll(rootClaude, 0755); err != nil {
-		t.Fatalf("failed to create .claude dir: %v", err)
-	}
-
-	// Create sibling workspace
-	agentName := "symlink-test"
-	agentPath := computeAgentPath(dir, agentName)
-
-	if err := client.WorkspaceAddFromDir(ctx, dir, agentPath, ""); err != nil {
-		t.Fatalf("WorkspaceAddFromDir failed: %v", err)
-	}
-
-	// Setup symlink
-	if err := setupClaudeSymlink(agentPath, dir); err != nil {
-		t.Fatalf("setupClaudeSymlink failed: %v", err)
-	}
-
-	// Verify symlink exists and points to correct location
-	agentClaude := filepath.Join(agentPath, ".claude")
-	info, err := os.Lstat(agentClaude)
-	if err != nil {
-		t.Fatalf("failed to stat .claude in agent: %v", err)
-	}
-
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Error(".claude should be a symlink")
-	}
-
-	// Verify symlink target
-	target, err := os.Readlink(agentClaude)
-	if err != nil {
-		t.Fatalf("failed to read symlink: %v", err)
-	}
-
-	// Target should be relative and point to root's .claude
-	expectedRel := "../testrepo/.claude"
-	if target != expectedRel {
-		t.Errorf("symlink target = %q, want %q", target, expectedRel)
-	}
-}
-
-func TestSetupClaudeSymlinkNoRootClaude(t *testing.T) {
-	dir, cleanup := setupTestRepo(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	client := jj.NewClient()
-
-	// Don't create .claude directory in root
-	agentName := "no-claude-test"
-	agentPath := computeAgentPath(dir, agentName)
-
-	if err := client.WorkspaceAddFromDir(ctx, dir, agentPath, ""); err != nil {
-		t.Fatalf("WorkspaceAddFromDir failed: %v", err)
-	}
-
-	// Setup symlink should succeed but not create anything
-	if err := setupClaudeSymlink(agentPath, dir); err != nil {
-		t.Fatalf("setupClaudeSymlink failed: %v", err)
-	}
-
-	// Verify no symlink was created
-	agentClaude := filepath.Join(agentPath, ".claude")
-	if _, err := os.Lstat(agentClaude); !os.IsNotExist(err) {
-		t.Error(".claude should not exist when root has no .claude")
-	}
-}
-
-func TestSetupClaudeSymlinkReplacesExistingDir(t *testing.T) {
-	dir, cleanup := setupTestRepo(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	client := jj.NewClient()
-
-	// Create .claude directory in root
-	rootClaude := filepath.Join(dir, ".claude")
-	if err := os.MkdirAll(rootClaude, 0755); err != nil {
-		t.Fatalf("failed to create .claude dir: %v", err)
-	}
-
-	// Create sibling workspace
-	agentName := "replace-dir-test"
-	agentPath := computeAgentPath(dir, agentName)
-
-	if err := client.WorkspaceAddFromDir(ctx, dir, agentPath, ""); err != nil {
-		t.Fatalf("WorkspaceAddFromDir failed: %v", err)
-	}
-
-	// Manually create .claude directory in agent workspace to simulate
-	// the scenario where it already exists (e.g., from previous run or jj tracking it)
-	agentClaude := filepath.Join(agentPath, ".claude")
-	if err := os.MkdirAll(agentClaude, 0755); err != nil {
-		t.Fatalf("failed to create .claude dir in agent: %v", err)
-	}
-	// Add a file inside to make it non-empty
-	if err := os.WriteFile(filepath.Join(agentClaude, "settings.json"), []byte("{}"), 0644); err != nil {
-		t.Fatalf("failed to create settings file: %v", err)
-	}
-
-	// Verify .claude exists as a directory (not a symlink)
-	info, err := os.Lstat(agentClaude)
-	if err != nil {
-		t.Fatalf("expected .claude to exist: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		t.Fatal("expected .claude to be a directory, not a symlink")
-	}
-
-	// Setup symlink should replace the directory with a symlink
-	if err := setupClaudeSymlink(agentPath, dir); err != nil {
-		t.Fatalf("setupClaudeSymlink failed: %v", err)
-	}
-
-	// Verify it's now a symlink
-	info, err = os.Lstat(agentClaude)
-	if err != nil {
-		t.Fatalf("failed to stat .claude after symlink setup: %v", err)
-	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Error(".claude should be a symlink after setupClaudeSymlink")
-	}
-
-	// Verify symlink target is correct
-	target, err := os.Readlink(agentClaude)
-	if err != nil {
-		t.Fatalf("failed to read symlink: %v", err)
-	}
-	expectedRel := "../testrepo/.claude"
-	if target != expectedRel {
-		t.Errorf("symlink target = %q, want %q", target, expectedRel)
-	}
-}
-
 func TestGitShimCreation(t *testing.T) {
 	dir, cleanup := setupTestRepo(t)
 	defer cleanup()
@@ -382,7 +239,7 @@ exit 1
 	}
 }
 
-func TestGitMarkerCreation(t *testing.T) {
+func TestGitDirCreation(t *testing.T) {
 	dir, cleanup := setupTestRepo(t)
 	defer cleanup()
 
@@ -401,15 +258,19 @@ func TestGitMarkerCreation(t *testing.T) {
 		t.Fatalf("WorkspaceAddFromDir failed: %v", err)
 	}
 
-	// Create .git marker (mimicking what runAgent does)
-	gitMarker := filepath.Join(agentPath, ".git")
-	if err := os.WriteFile(gitMarker, []byte{}, 0644); err != nil {
-		t.Fatalf("failed to create .git marker: %v", err)
+	// Create .git directory (mimicking what runAgent does)
+	gitDir := filepath.Join(agentPath, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("failed to create .git directory: %v", err)
 	}
 
-	// Verify marker exists
-	if _, err := os.Stat(gitMarker); os.IsNotExist(err) {
-		t.Error(".git marker was not created")
+	// Verify .git directory exists (scopes Claude)
+	info, err := os.Stat(gitDir)
+	if os.IsNotExist(err) {
+		t.Error(".git directory was not created")
+	}
+	if !info.IsDir() {
+		t.Error(".git should be a directory")
 	}
 }
 
@@ -433,20 +294,15 @@ func TestCleanup(t *testing.T) {
 		t.Fatalf("WorkspaceAddFromDir failed: %v", err)
 	}
 
-	// Create .dojo-agent marker
+	// Create .jj/dojo-agent marker
 	if err := createAgentMarker(agentPath, dir, agentName); err != nil {
 		t.Fatalf("createAgentMarker failed: %v", err)
 	}
 
-	// Create .claude symlink (first create root .claude)
-	rootClaude := filepath.Join(dir, ".claude")
-	os.MkdirAll(rootClaude, 0755)
-	setupClaudeSymlink(agentPath, dir)
-
-	// Create .git marker
-	gitMarker := filepath.Join(agentPath, ".git")
-	if err := os.WriteFile(gitMarker, []byte{}, 0644); err != nil {
-		t.Fatalf("failed to create .git marker: %v", err)
+	// Create .git directory
+	gitDir := filepath.Join(agentPath, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("failed to create .git directory: %v", err)
 	}
 
 	// Create shim
@@ -478,8 +334,7 @@ func TestCleanup(t *testing.T) {
 
 // cleanupTest mirrors the cleanup function for testing
 func cleanupTest(ctx context.Context, client *jj.Client, jjWorkspaceName, workspacePath, rootPath string) {
-	os.Remove(filepath.Join(workspacePath, ".git"))
-	os.Remove(filepath.Join(workspacePath, ".claude"))
+	os.RemoveAll(filepath.Join(workspacePath, ".git"))
 	os.Remove(filepath.Join(workspacePath, agentMarkerFile))
 	client.WorkspaceForgetFromDir(ctx, rootPath, jjWorkspaceName)
 	os.RemoveAll(workspacePath)
@@ -606,6 +461,46 @@ func TestCheckParentWritable(t *testing.T) {
 	// Parent should be writable (it's a temp dir we created)
 	if err := checkParentWritable(dir); err != nil {
 		t.Errorf("checkParentWritable failed for writable dir: %v", err)
+	}
+}
+
+func TestMarkersHiddenFromJJStatus(t *testing.T) {
+	dir, cleanup := setupTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	client := jj.NewClient()
+
+	// Create sibling workspace
+	agentName := "status-test"
+	agentPath := computeAgentPath(dir, agentName)
+
+	if err := client.WorkspaceAddFromDir(ctx, dir, agentPath, ""); err != nil {
+		t.Fatalf("WorkspaceAddFromDir failed: %v", err)
+	}
+
+	// Create .git directory (auto-ignored by jj)
+	gitDir := filepath.Join(agentPath, ".git")
+	if err := os.MkdirAll(gitDir, 0755); err != nil {
+		t.Fatalf("failed to create .git directory: %v", err)
+	}
+
+	// Create .jj/dojo-agent marker (inside .jj so auto-ignored)
+	if err := createAgentMarker(agentPath, dir, agentName); err != nil {
+		t.Fatalf("createAgentMarker failed: %v", err)
+	}
+
+	// Get jj status from the agent workspace
+	status, err := client.StatusFromDir(ctx, agentPath)
+	if err != nil {
+		t.Fatalf("StatusFromDir failed: %v", err)
+	}
+
+	// Verify markers don't appear in status
+	// .jj/dojo-agent is inside .jj so auto-ignored
+	// .git is auto-ignored by jj
+	if strings.Contains(status, "dojo-agent") {
+		t.Errorf("dojo-agent should not appear in jj status, got: %s", status)
 	}
 }
 

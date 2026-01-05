@@ -51,8 +51,9 @@ Agent workspaces are created as siblings to your repository:
 ```
 
 This structure enables:
-- **Permission inheritance**: Agent workspaces symlink `.claude/` from root, so tool approvals are shared
+- **Full copy**: Agent workspaces get a complete copy of the repository including `.claude/`
 - **Better visibility**: Workspaces are easily accessible, not hidden in `.jj/`
+- **Clean jj status**: Dojo markers are auto-ignored by jj
 
 ### Workspace Isolation
 
@@ -60,7 +61,7 @@ Each agent runs in its own jj workspace with:
 - **Separate revision**: Changes don't affect your main workspace
 - **Git shim**: Blocks `git` commands, forcing `jj` usage
 - **Scoped root**: Claude sees only the workspace as project root
-- **Marker file**: `.dojo-agent` identifies agent workspaces
+- **Marker file**: `.jj/dojo-agent` identifies agent workspaces (auto-ignored)
 
 ### Multi-Agent Workflow
 

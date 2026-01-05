@@ -6,8 +6,9 @@ Minimal CLI wrapper that launches Claude Code in isolated jj workspaces.
 
 ```
 dojo <name>
-  → jj workspace add .jj/agents/<name>/
-  → create .git marker (scope isolation)
+  → jj workspace add ../<repo>-<name>/   (sibling directory)
+  → create .git directory (scope isolation, auto-ignored by jj)
+  → create .jj/dojo-agent marker (auto-ignored by jj)
   → create git shim (blocks git)
   → exec claude (full terminal passthrough)
   → prompt cleanup on exit
@@ -29,10 +30,11 @@ dojo <name>
 
 ## Workspace Isolation Mechanisms
 
-1. **jj workspace**: Each agent gets its own jj workspace/revision
-2. **.git marker**: Empty file at workspace root scopes Claude to that directory
-3. **git shim**: Script in PATH that blocks git commands, forces jj usage
-4. **PWD**: Claude runs with workspace as working directory
+1. **jj workspace**: Each agent gets its own jj workspace/revision as sibling directory
+2. **.git directory**: Empty directory at workspace root scopes Claude (auto-ignored by jj)
+3. **.jj/dojo-agent**: Marker file with metadata (auto-ignored, inside .jj/)
+4. **git shim**: Script in PATH that blocks git commands, forces jj usage
+5. **PWD**: Claude runs with workspace as working directory
 
 ## Code Patterns
 
@@ -51,9 +53,10 @@ cmd.Run()
 ### Cleanup
 
 ```go
-os.Remove(filepath.Join(workspacePath, ".git"))  // Remove marker first
-client.WorkspaceForget(ctx, name)                 // Unregister from jj
-os.RemoveAll(workspacePath)                       // Delete directory
+os.RemoveAll(filepath.Join(workspacePath, ".git"))  // Remove .git directory
+os.Remove(filepath.Join(workspacePath, ".jj/dojo-agent"))  // Remove marker
+client.WorkspaceForget(ctx, name)                   // Unregister from jj
+os.RemoveAll(workspacePath)                         // Delete directory
 ```
 
 ## When to Look Here
