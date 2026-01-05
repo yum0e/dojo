@@ -512,7 +512,7 @@ func (m ChatViewModel) View() string {
 		if m.currentPhase != "" {
 			activity = m.currentPhase + " - " + activity
 		}
-		activityLine := "  " + IndicatorRunningStyle.Render(spinner) + " " + ChatProcessingStyle.Render(activity)
+		activityLine := "  " + ChatSpinnerStyle.Render(spinner) + " " + ChatProcessingStyle.Render(activity)
 		lines = append(lines, activityLine)
 	}
 

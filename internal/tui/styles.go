@@ -13,9 +13,10 @@ var (
 	colorHighlight = lipgloss.Color("#2A2A2A")
 	colorDark      = lipgloss.Color("#1A1A1A")
 
-	// Chat message backgrounds - subtle and smooth
-	colorUserMsgBg   = lipgloss.Color("#252525") // Slightly lighter than dark
-	colorClaudeMsgBg = lipgloss.Color("#1E1E1E") // Very subtle, close to dark
+	// Chat message backgrounds - more visible
+	colorUserMsgBg   = lipgloss.Color("#2A2A2A") // Visible lighter background for user
+	colorClaudeMsgBg = lipgloss.Color("#1F1F1F") // Subtle dark background for Claude
+	colorOrangeDim   = lipgloss.Color("#CC7A30") // Dimmer orange for context text
 )
 
 // Title styles (kept for compatibility but not used)
@@ -153,6 +154,9 @@ var (
 				Bold(true)
 
 	ChatProcessingStyle = lipgloss.NewStyle().
-				Foreground(colorMint).
+				Foreground(colorOrangeDim).
 				Italic(true)
+
+	ChatSpinnerStyle = lipgloss.NewStyle().
+				Foreground(colorOrange)
 )
