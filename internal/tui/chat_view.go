@@ -544,27 +544,41 @@ func (m ChatViewModel) View() string {
 
 // renderMessage renders a single chat message.
 func (m ChatViewModel) renderMessage(msg ChatMessage) []string {
+	contentWidth := m.width - 2 // Account for padding in style
+
 	switch msg.Role {
 	case RoleUser:
 		prefix := ChatUserStyle.Render("● you: ")
 		content := msg.Content
-		lines := wrapLines(prefix+content, m.width-2) // -2 for padding
+		lines := wrapLines(prefix+content, contentWidth)
 		// Apply background to each line, padding to full width
 		for i, line := range lines {
-			padded := line + strings.Repeat(" ", m.width-2-lipgloss.Width(line))
+			padWidth := contentWidth - lipgloss.Width(line)
+			if padWidth < 0 {
+				padWidth = 0
+			}
+			padded := line + strings.Repeat(" ", padWidth)
 			lines[i] = ChatUserMsgStyle.Render(padded)
 		}
+		// Add empty line after message for spacing
+		lines = append(lines, "")
 		return lines
 
 	case RoleAgent:
 		prefix := ChatAgentStyle.Render("● claude: ")
 		content := msg.Content
-		lines := wrapLines(prefix+content, m.width-2) // -2 for padding
+		lines := wrapLines(prefix+content, contentWidth)
 		// Apply background to each line, padding to full width
 		for i, line := range lines {
-			padded := line + strings.Repeat(" ", m.width-2-lipgloss.Width(line))
+			padWidth := contentWidth - lipgloss.Width(line)
+			if padWidth < 0 {
+				padWidth = 0
+			}
+			padded := line + strings.Repeat(" ", padWidth)
 			lines[i] = ChatAgentMsgStyle.Render(padded)
 		}
+		// Add empty line after message for spacing
+		lines = append(lines, "")
 		return lines
 
 	case RoleError:
@@ -573,6 +587,8 @@ func (m ChatViewModel) renderMessage(msg ChatMessage) []string {
 		if m.agentState == agent.StateError {
 			lines = append(lines, HelpStyle.Render("  Press 'r' to retry"))
 		}
+		// Add empty line after message for spacing
+		lines = append(lines, "")
 		return lines
 	}
 
