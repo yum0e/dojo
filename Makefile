@@ -17,6 +17,8 @@ endif
 	NEW_VERSION="$$MAJOR.$$MINOR.$$PATCH"; \
 	sed -i '' "s/^version = \".*\"/version = \"$$NEW_VERSION\"/" pyproject.toml; \
 	echo "Bumped version: $$VERSION -> $$NEW_VERSION"; \
+	jj commit -m "chore(release): v$$NEW_VERSION"; \
+	echo "Created jj commit: chore(release): v$$NEW_VERSION"; \
 	git tag "v$$NEW_VERSION"; \
 	echo "Created tag: v$$NEW_VERSION"
 
