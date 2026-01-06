@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from kekkai.cli import (
     compute_jj_workspace_name,
     create_agent_marker,
     find_root_workspace,
+    main,
     run_agent,
 )
 from kekkai.jj import JJClient
@@ -352,3 +354,29 @@ def test_spinner_shown_during_setup(temp_jj_repo, monkeypatch):
     # Verify spinner message was shown
     output = output_buffer.getvalue().lower()
     assert "summoning" in output, f"Spinner message not found in output: {output}"
+
+
+def test_help_shows_version(capsys, monkeypatch):
+    """Help output should include the package version."""
+    from kekkai import __version__
+
+    monkeypatch.setattr(sys, "argv", ["kekkai", "--help"])
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    assert excinfo.value.code == 0
+    output = capsys.readouterr().out
+    assert f"kekkai {__version__}" in output
+
+
+def test_version_flag_outputs_version(capsys, monkeypatch):
+    """--version should print the package version."""
+    from kekkai import __version__
+
+    monkeypatch.setattr(sys, "argv", ["kekkai", "--version"])
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    assert excinfo.value.code == 0
+    output = capsys.readouterr().out
+    assert f"kekkai {__version__}" in output

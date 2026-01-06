@@ -16,6 +16,7 @@ endif
 	esac; \
 	NEW_VERSION="$$MAJOR.$$MINOR.$$PATCH"; \
 	sed -i '' "s/^version = \".*\"/version = \"$$NEW_VERSION\"/" pyproject.toml; \
+	sed -i '' "s/^__version__ = \".*\"/__version__ = \"$$NEW_VERSION\"/" src/kekkai/__init__.py; \
 	echo "Bumped version: $$VERSION -> $$NEW_VERSION"; \
 	jj commit -m "chore(release): v$$NEW_VERSION"; \
 	echo "Created jj commit: chore(release): v$$NEW_VERSION"; \

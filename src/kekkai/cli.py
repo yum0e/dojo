@@ -12,6 +12,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from . import __version__
 from .errors import NotJJRepoError, WorkspaceExistsError
 from .jj import JJClient
 
@@ -303,7 +304,13 @@ def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
         prog="kekkai",
-        description="Launch AI agents in isolated jj workspaces",
+        description=f"kekkai {__version__} - Launch AI agents in isolated jj workspaces",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"kekkai {__version__}",
+        help="Show version and exit",
     )
     parser.add_argument(
         "name",
