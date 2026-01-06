@@ -1,5 +1,6 @@
 """Main CLI entry point for kekkai."""
 
+import argparse
 import json
 import os
 import shutil
@@ -24,6 +25,21 @@ exit 1
 """
 
 
+@dataclass(frozen=True)
+class Agent:
+    """Agent configuration."""
+
+    name: str
+    executable: str
+
+
+AGENTS: dict[str, Agent] = {
+    "codex": Agent("codex", "codex"),
+    "claude": Agent("claude", "claude"),
+}
+DEFAULT_AGENT = "codex"
+
+
 @dataclass
 class AgentMarker:
     """Metadata stored in the agent marker file."""
@@ -31,14 +47,7 @@ class AgentMarker:
     root_workspace: str
     name: str
     created_at: str
-
-
-def print_usage() -> None:
-    """Print CLI usage information."""
-    print(
-        """Usage: kekkai <name>    Create workspace and launch Claude
-       kekkai list      List existing workspaces"""
-    )
+    agent: str = "claude"  # default for backward compatibility
 
 
 def find_root_workspace(client: JJClient) -> str:
@@ -72,12 +81,15 @@ def compute_jj_workspace_name(root_path: str, agent_name: str) -> str:
     return f"{Path(root_path).name}-{agent_name}"
 
 
-def create_agent_marker(workspace_path: str, root_path: str, name: str) -> None:
+def create_agent_marker(
+    workspace_path: str, root_path: str, name: str, agent: str
+) -> None:
     """Write the agent marker file."""
     marker = AgentMarker(
         root_workspace=root_path,
         name=name,
         created_at=datetime.now(timezone.utc).isoformat(),
+        agent=agent,
     )
     marker_path = Path(workspace_path) / AGENT_MARKER_FILE
     marker_path.write_text(json.dumps(asdict(marker), indent=2))
@@ -133,8 +145,8 @@ def cleanup(
         print(f"Warning: failed to remove workspace directory: {e}", file=sys.stderr)
 
 
-def run_agent(name: str) -> None:
-    """Create workspace and run Claude agent."""
+def run_agent(name: str, agent: Agent) -> None:
+    """Create workspace and run agent."""
     client = JJClient()
     console = Console()
 
@@ -197,7 +209,7 @@ def run_agent(name: str) -> None:
 
         # 8. Create agent marker file
         try:
-            create_agent_marker(workspace_path, root, name)
+            create_agent_marker(workspace_path, root, name, agent.name)
         except OSError as e:
             console.print(f"Error creating agent marker: {e}", style="red")
             cleanup(client, jj_workspace_name, workspace_path, root)
@@ -218,11 +230,11 @@ def run_agent(name: str) -> None:
         env = os.environ.copy()
         env["PATH"] = f"{shim_path}:{env.get('PATH', '')}"
 
-    # 11. Run claude with terminal passthrough (outside spinner)
-    result = subprocess.run(["claude"], cwd=workspace_path, env=env)
+    # 11. Run agent with terminal passthrough (outside spinner)
+    result = subprocess.run([agent.executable], cwd=workspace_path, env=env)
 
     if result.returncode != 0:
-        print(f"\nClaude exited with code {result.returncode}", file=sys.stderr)
+        print(f"\n{agent.name.capitalize()} exited with code {result.returncode}", file=sys.stderr)
 
     # 11. Check for uncommitted changes
     if has_uncommitted_changes(client, workspace_path):
@@ -275,7 +287,12 @@ def list_workspaces() -> None:
             agent_path = Path(root).parent / ws.name
             marker_path = agent_path / AGENT_MARKER_FILE
             if marker_path.exists():
-                print(f"{agent_name}: {ws.change_id} {ws.commit_id} {ws.summary}")
+                try:
+                    data = json.loads(marker_path.read_text())
+                    agent_type = data.get("agent", "claude")
+                except (json.JSONDecodeError, OSError):
+                    agent_type = "unknown"
+                print(f"{agent_name} [{agent_type}]: {ws.change_id} {ws.commit_id} {ws.summary}")
                 found = True
 
     if not found:
@@ -284,17 +301,31 @@ def list_workspaces() -> None:
 
 def main() -> None:
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print_usage()
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        prog="kekkai",
+        description="Launch AI agents in isolated jj workspaces",
+    )
+    parser.add_argument(
+        "name",
+        nargs="?",
+        help="Workspace name (or 'list' to list workspaces)",
+    )
+    parser.add_argument(
+        "--agent",
+        "-a",
+        choices=list(AGENTS.keys()),
+        default=DEFAULT_AGENT,
+        help=f"Agent to use (default: {DEFAULT_AGENT})",
+    )
+    args = parser.parse_args()
 
-    match sys.argv[1]:
-        case "list":
-            list_workspaces()
-        case "-h" | "--help" | "help":
-            print_usage()
-        case name:
-            run_agent(name)
+    if args.name is None:
+        parser.print_help()
+        sys.exit(1)
+    elif args.name == "list":
+        list_workspaces()
+    else:
+        run_agent(args.name, AGENTS[args.agent])
 
 
 if __name__ == "__main__":

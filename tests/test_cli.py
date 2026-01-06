@@ -9,7 +9,9 @@ import pytest
 
 from kekkai.cli import (
     AGENT_MARKER_FILE,
+    AGENTS,
     SHIM_DIR,
+    Agent,
     AgentMarker,
     check_parent_writable,
     cleanup,
@@ -73,7 +75,7 @@ def test_find_root_workspace_from_agent(temp_jj_repo):
     client.workspace_add(agent_path, cwd=str(temp_jj_repo))
 
     # Create the agent marker pointing to root
-    create_agent_marker(agent_path, str(temp_jj_repo), agent_name)
+    create_agent_marker(agent_path, str(temp_jj_repo), agent_name, "codex")
 
     # Change to agent directory
     old_cwd = os.getcwd()
@@ -96,7 +98,7 @@ def test_create_agent_marker(temp_jj_repo):
     client.workspace_add(agent_path, cwd=str(temp_jj_repo))
 
     # Create marker
-    create_agent_marker(agent_path, str(temp_jj_repo), agent_name)
+    create_agent_marker(agent_path, str(temp_jj_repo), agent_name, "codex")
 
     # Verify marker exists and has correct content
     marker_path = Path(agent_path) / AGENT_MARKER_FILE
@@ -105,6 +107,7 @@ def test_create_agent_marker(temp_jj_repo):
     assert data["root_workspace"] == str(temp_jj_repo)
     assert data["name"] == agent_name
     assert data["created_at"]  # Should not be empty
+    assert data["agent"] == "codex"
 
 
 def test_git_shim_creation(temp_jj_repo):
@@ -169,7 +172,7 @@ def test_cleanup(temp_jj_repo):
     client.workspace_add(agent_path, cwd=str(temp_jj_repo))
 
     # Create agent marker
-    create_agent_marker(agent_path, str(temp_jj_repo), agent_name)
+    create_agent_marker(agent_path, str(temp_jj_repo), agent_name, "codex")
 
     # Create .git directory
     git_dir = Path(agent_path) / ".git"
@@ -218,7 +221,7 @@ def test_markers_hidden_from_jj_status(temp_jj_repo):
     git_dir.mkdir(parents=True, exist_ok=True)
 
     # Create agent marker (inside .jj so auto-ignored)
-    create_agent_marker(agent_path, str(temp_jj_repo), agent_name)
+    create_agent_marker(agent_path, str(temp_jj_repo), agent_name, "codex")
 
     # Get jj status from the agent workspace
     status = client.status(cwd=agent_path)
@@ -236,7 +239,7 @@ def test_nested_agent_creation(temp_jj_repo):
     agent1_path = compute_agent_path(str(temp_jj_repo), agent1_name)
 
     client.workspace_add(agent1_path, cwd=str(temp_jj_repo))
-    create_agent_marker(agent1_path, str(temp_jj_repo), agent1_name)
+    create_agent_marker(agent1_path, str(temp_jj_repo), agent1_name, "codex")
 
     # Change to agent1 directory
     old_cwd = os.getcwd()
@@ -282,7 +285,7 @@ def test_list_workspaces_with_agents(temp_jj_repo):
     for name in agents:
         agent_path = compute_agent_path(str(temp_jj_repo), name)
         client.workspace_add(agent_path, cwd=str(temp_jj_repo))
-        create_agent_marker(agent_path, str(temp_jj_repo), name)
+        create_agent_marker(agent_path, str(temp_jj_repo), name, "codex")
 
     # List workspaces
     workspaces = client.workspace_list(cwd=str(temp_jj_repo))
@@ -339,7 +342,7 @@ def test_spinner_shown_during_setup(temp_jj_repo, monkeypatch):
     old_cwd = os.getcwd()
     os.chdir(temp_jj_repo)
     try:
-        run_agent("spinner-test")
+        run_agent("spinner-test", AGENTS["claude"])
     finally:
         os.chdir(old_cwd)
 
