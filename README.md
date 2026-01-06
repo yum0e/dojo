@@ -1,6 +1,6 @@
 # Kekkai
 
-A minimal CLI that launches Claude Code in isolated jj workspaces.
+A minimal CLI that launches AI coding agents (Codex, Claude) in isolated jj workspaces.
 
 ## Installation
 
@@ -14,7 +14,7 @@ uvx kekkai
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/code) installed and in PATH
+- [Codex CLI](https://openai.com/codex) or [Claude Code](https://claude.ai/code) installed and in PATH
 - [Jujutsu (jj)](https://github.com/martinvonz/jj) installed and in PATH
 - Must be run from inside a jj repository
 - [Watchman](https://facebook.github.io/watchman/) (**highly recommended** for real-time snapshotting and a full experience, see [Watchman Setup](#watchman-setup))
@@ -22,17 +22,22 @@ uvx kekkai
 ## Quick Start
 
 ```bash
-# Launch Claude in a new isolated workspace
+# Launch Codex (default) in a new isolated workspace
 kekkai feature-auth
+
+# Launch Claude instead
+kekkai feature-auth --agent=claude
 
 # List existing agent workspaces
 kekkai list
 ```
 
-When you run `kekkai <name>`:
+Use `--agent=codex|claude` to select the agent.
+
+When you run `kekkai <name>` (default agent: codex):
 
 1. Creates an isolated jj workspace as a sibling directory (`<repo>-<name>/`)
-2. Launches Claude Code with full terminal experience
+2. Launches the selected agent with full terminal experience
 3. On exit, prompts whether to keep or delete the workspace
 
 ## Multi-Agent Workflow
